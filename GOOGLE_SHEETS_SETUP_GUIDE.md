@@ -5,85 +5,62 @@
 
 ## What This System Does
 
-This playtest data collection system automatically captures detailed game statistics from your Wyldwood sessions and sends them to a Google Sheets database. This allows you to:
+This playtest data collection system automatically captures detailed game statistics from your Wyldwood sessions and sends them to a Google Sheets database. This is focused on Totals - providing summary statistics at a glance.
 
-- **Track balance over time** — See which factions win more often and by how much
-- **Identify problematic cards** — Find cards that appear in winning decks too frequently (or never)
-- **Analyze champion performance** — Track which champions survive, die, or accumulate woodwisps
-- **Collect player feedback** — Gather qualitative feedback alongside quantitative data
-- **Generate reports and charts** — Use Google Sheets' built-in tools to visualize trends
+### Key Features:
+- **Faction Totals** — Win rates, average scores per faction
+- **Champion Totals** — Average health, woodwisps held, death rates per champion
+- **Card Totals** — How many times each card has been taken across all games
+- **Match Results** — Complete log of every match played
 
 ---
 
-## Data Points Collected
+## Sheet Structure Overview
 
-Each time a playtester clicks "Submit Playtest Data," the system captures:
+### Main Sheets (Auto-Updated Summary Stats)
+These sheets show running totals that update automatically after each match submission.
 
-### Per Match (Games Sheet)
-| Data Point | Description |
-|------------|-------------|
-| **Game ID** | Unique identifier linking all data from one session |
-| **Timestamp** | Date and time the game ended |
-| **Round Ended** | Which round the game concluded on |
-| **Winner** | Which faction won (auto-calculated from scores) |
-| **Feedback** | Card and general feedback from playtesters |
+| Sheet | Purpose |
+|-------|---------|
+| **MatchResults** | Two rows per match (one per faction), the main match log |
+| **FactionTotals** | Win %, average score per faction |
+| **ChampionTotals** | Average wisps, average health, death % per champion |
+| **CardTotals** | Times taken per card per faction |
 
-### Per Faction (FactionResults Sheet)
-This is the **primary sheet for faction analysis** — each game creates **one row per faction** so you can easily filter by faction name!
+### Raw Data Sheets (Individual Match Data)
+While they aren't usefull to read, they are used to store the raw data used to calculate totals. 
 
-| Data Point | Description |
-|------------|-------------|
-| **Game ID** | Links back to the match |
-| **Faction** | The faction name (e.g., "Leafsong Nomads") |
-| **Player Name** | The Steam name of the player controlling this faction |
-| **Score** | Final victory points for this faction |
-| **Deck Size** | Total cards in this faction's deck |
-| **Is Winner** | TRUE/FALSE — did this faction win? |
-| **Opponent** | Which faction they played against |
-| **Opponent Score** | The opposing faction's final score |
+| Sheet | Purpose |
+|-------|---------|
+| **DATADeckCards** | Raw card picks (used only for Card Totals) |
+| **DATAChampions** | Raw champion stats (used only for Champion Totals) |
 
-### Per Card (DeckCards Sheet)
-Tracks which cards players choose for their decks. The **faction** column lets you filter by faction to answer questions like *"What cards do Leafsong players pick most often?"*
+---
 
-| Data Point | Description |
-|------------|-------------|
-| **Game ID** | Links back to the match |
-| **Card Name** | Name of each card in the deck |
-| **Faction** | Which faction's deck this card belongs to (for filtering) |
+## Data Format
 
-**Example analysis:**
-- Filter by `faction = "Leafsong Nomads"` → see all cards Leafsong players have used
-- Create a pivot table (cardName × count) filtered by faction → most popular cards for that faction
-- Join with FactionResults using gameId to see cards in *winning* decks
+### Match Results (2 rows per game)
+| GameID | Timestamp | Faction | Player Name | Round Ended | Win/Lose | Final Score |
+|--------|-----------|---------|-------------|-------------|----------|-------------|
+| 00001 | 01-31-26 23:59 | Leafsong Nomads | Raikoh | 6 | LOSE | 9 |
+| 00001 | 01-31-26 23:59 | Boulderbreaker Clans | Brian | 6 | WIN | 11 |
 
-### Per Champion
-| Data Point | Description |
-|------------|-------------|
-| **Champion Name** | e.g., Loresinger, UrscarKing |
-| **Faction** | Which faction this champion belongs to |
-| **Final Health** | Health remaining at game end |
-| **Max Health** | Champion's starting health |
-| **Woodwisps** | Number of woodwisps on this champion |
-| **Is Dead** | TRUE/FALSE — was this champion eliminated? |
+### Faction Totals
+| Faction | Win % | Average Score | Games Played |
+|---------|-------|---------------|--------------|
+| Leafsong Nomads | 52% | 9.3 | 25 |
+| Boulderbreaker Clans | 48% | 9.1 | 25 |
 
-### Current Champion Faction Reference
+### Champion Totals
+| Faction | Champion Name | Average Wisps Held | Average Health | Death % |
+|---------|---------------|--------------------| ---------------|---------|
+| Leafsong Nomads | Loresinger | 1.8 | 6.5 | 19% |
 
-| Leafsong Nomads | Boulderbreaker Clans |
-|-----------------|---------------------|
-| Loresinger | UrscarKing |
-| HighSpiritseer | FellcastHunter |
-| BonebladeAlpha | MakaraElder |
-| Wyldspeaker | OutcastKingsguard |
-| WyrdbowSentinel | Painseeker |
+### Card Totals
+| Faction | Card Name | Times Taken |
+|---------|-----------|-------------|
+| Leafsong Nomads | Prancing Stride | 98 |
 
-*More factions coming soon!*
-
-### Feedback (Optional)
-| Data Point | Description |
-|------------|-------------|
-| **Card Feedback** | Cards that felt too strong/weak |
-| **General Feedback** | Any other comments from playtesters |
- 
 ---
 
 ## Setup Instructions
@@ -92,64 +69,58 @@ Tracks which cards players choose for their decks. The **faction** column lets y
 
 1. Go to [sheets.google.com](https://sheets.google.com)
 2. Click the **+ Blank** button to create a new spreadsheet
-3. Name it **"Wyldwood Playtest Data"** (click "Untitled spreadsheet" at top-left)
+3. Name it **"Wyldwood Playtest Data"**
 
-### Step 2: Create the Four Data Sheets
+### Step 2: Create the Required Sheets
 
-You need four sheets (tabs) to store different types of data.
+Create these 6 sheet tabs in this order (the order doesn’t affect the script, it’s just for clarity):
 
-1. Look at the bottom of the screen — you'll see a tab called "Sheet1"
-2. **Right-click** the "Sheet1" tab and select **Rename** → type **Games**
-3. Click the **+** button next to the tabs to add a new sheet → name it **FactionResults**
-4. Click the **+** button again → name it **DeckCards**
-5. Click the **+** button again → name it **Champions**
-
-You should now have four tabs: `Games`, `FactionResults`, `DeckCards`, `Champions`
+1. **MatchResults** — Rename "Sheet1" to this
+2. **FactionTotals** — Click + to add
+3. **ChampionTotals** — Click + to add
+4. **CardTotals** — Click + to add
+5. **DATADeckCards** — Click + to add
+6. **DATAChampions** — Click + to add
 
 ### Step 3: Add Column Headers
 
-Click on each sheet tab and add these headers in **Row 1**:
+#### MatchResults Sheet
+| A | B | C | D | E | F | G |
+|---|---|---|---|---|---|---|
+| gameId | timestamp | faction | playerName | roundEnded | winLose | finalScore |
 
-#### Games Sheet (Match Metadata)
-Type these in cells A1 through F1:
-
-| A | B | C | D | E | F |
-|---|---|---|---|---|---|
-| gameId | timestamp | roundEnded | winner | cardFeedback | generalFeedback |
-
-#### FactionResults Sheet (Faction Stats — Primary Analysis Sheet!)
-Type these in cells A1 through I1:
-
-| A | B | C | D | E | F | G | H | I |
-|---|---|---|---|---|---|---|---|---|
-| gameId | timestamp | faction | playerName | score | deckSize | isWinner | opponent | opponentScore |
-
-> **Why this design?** Each game creates TWO rows here (one per faction). This makes it trivial to filter by faction name and see all Leafsong Nomads stats, for example. New factions automatically work — they just add more rows, not more columns!
-
-#### DeckCards Sheet
-Type these in cells A1 through D1:
-
+#### DATADeckCards Sheet
 | A | B | C | D |
 |---|---|---|---|
 | gameId | timestamp | faction | cardName |
 
-#### Champions Sheet
-Type these in cells A1 through H1:
-
+#### DATAChampions Sheet
 | A | B | C | D | E | F | G | H |
 |---|---|---|---|---|---|---|---|
 | gameId | timestamp | faction | championName | finalHealth | maxHealth | woodwisps | isDead |
 
+#### FactionTotals Sheet
+| A | B | C | D |
+|---|---|---|---|
+| faction | winPercent | avgScore | gamesPlayed |
+
+#### ChampionTotals Sheet
+| A | B | C | D | E |
+|---|---|---|---|---|
+| faction | championName | avgWisps | avgHealth | deathPercent |
+
+#### CardTotals Sheet
+| A | B | C |
+|---|---|---|
+| faction | cardName | timesTaken |
+
 ### Step 4: Open Google Apps Script
 
-1. In your Google Sheet, click **Extensions** in the menu bar
-2. Select **Apps Script**
-3. A new tab will open with a code editor
-4. **Delete** everything in the editor (select all, delete)
+1. In your Google Sheet, click **Extensions** → **Apps Script**
+2. **Delete** everything in the editor
+3. Paste the script below
 
 ### Step 5: Paste the Webhook Script
-
-Copy the entire script below and paste it into the Apps Script editor:
 
 ```javascript
 /**
@@ -158,10 +129,12 @@ Copy the entire script below and paste it into the Apps Script editor:
  */
 
 const CONFIG = {
-  GAMES_SHEET: 'Games',
-  FACTION_RESULTS_SHEET: 'FactionResults',
-  DECK_CARDS_SHEET: 'DeckCards',
-  CHAMPIONS_SHEET: 'Champions'
+  MATCH_RESULTS_SHEET: 'MatchResults',
+  DECK_CARDS_SHEET: 'DATADeckCards',
+  CHAMPIONS_SHEET: 'DATAChampions',
+  FACTION_TOTALS_SHEET: 'FactionTotals',
+  CHAMPION_TOTALS_SHEET: 'ChampionTotals',
+  CARD_TOTALS_SHEET: 'CardTotals'
 };
 
 function doPost(e) {
@@ -171,15 +144,20 @@ function doPost(e) {
     
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
-    writeGameData(ss, data.game);
-    writeFactionResultsData(ss, data.factionResults);
-    writeDeckCardsData(ss, data.deckCards);
-    writeChampionsData(ss, data.champions);
+    // Write raw data
+    writeMatchResults(ss, data.matchResults, data.feedback);
+    writeDeckCards(ss, data.deckCards);
+    writeChampions(ss, data.champions);
+    
+    // Update totals
+    updateFactionTotals(ss);
+    updateChampionTotals(ss);
+    updateCardTotals(ss);
     
     return ContentService
       .createTextOutput(JSON.stringify({
         status: 'success',
-        message: 'Data recorded successfully',
+        message: 'Data recorded and totals updated',
         gameId: data.gameId
       }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -204,45 +182,40 @@ function doGet(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function writeGameData(ss, gameData) {
-  const sheet = ss.getSheetByName(CONFIG.GAMES_SHEET);
-  if (!sheet) throw new Error('Games sheet not found');
-  
-  sheet.appendRow([
-    gameData.gameId,
-    gameData.timestamp,
-    gameData.roundEnded,
-    gameData.winner || 'Tie',
-    gameData.cardFeedback || '',
-    gameData.generalFeedback || ''
-  ]);
-}
+// =====================================
+// RAW DATA WRITING FUNCTIONS
+// =====================================
 
-function writeFactionResultsData(ss, factionResults) {
-  const sheet = ss.getSheetByName(CONFIG.FACTION_RESULTS_SHEET);
-  if (!sheet) throw new Error('FactionResults sheet not found');
+function writeMatchResults(ss, matchResults, feedback) {
+  const sheet = ss.getSheetByName(CONFIG.MATCH_RESULTS_SHEET);
+  if (!sheet) throw new Error('MatchResults sheet not found');
   
-  const rows = factionResults.map(fr => [
-    fr.gameId,
-    fr.timestamp,
-    fr.faction,
-    fr.playerName,
-    fr.score,
-    fr.deckSize,
-    fr.isWinner,
-    fr.opponent,
-    fr.opponentScore
+  const rows = matchResults.map(mr => [
+    mr.gameId,
+    mr.timestamp,
+    mr.faction,
+    mr.playerName,
+    mr.roundEnded,
+    mr.winLose,
+    mr.finalScore
   ]);
   
   if (rows.length > 0) {
     const startRow = sheet.getLastRow() + 1;
     sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
   }
+  
+  // Store feedback in the first row of each match (column H onwards if desired)
+  // For now, feedback is logged but not stored separately
+  if (feedback && (feedback.cardFeedback || feedback.generalFeedback)) {
+    console.log('Card Feedback: ' + (feedback.cardFeedback || 'None'));
+    console.log('General Feedback: ' + (feedback.generalFeedback || 'None'));
+  }
 }
 
-function writeDeckCardsData(ss, deckCards) {
+function writeDeckCards(ss, deckCards) {
   const sheet = ss.getSheetByName(CONFIG.DECK_CARDS_SHEET);
-  if (!sheet) throw new Error('DeckCards sheet not found');
+  if (!sheet) throw new Error('DATADeckCards sheet not found');
   
   const rows = deckCards.map(card => [
     card.gameId,
@@ -257,9 +230,9 @@ function writeDeckCardsData(ss, deckCards) {
   }
 }
 
-function writeChampionsData(ss, champions) {
+function writeChampions(ss, champions) {
   const sheet = ss.getSheetByName(CONFIG.CHAMPIONS_SHEET);
-  if (!sheet) throw new Error('Champions sheet not found');
+  if (!sheet) throw new Error('DATAChampions sheet not found');
   
   const rows = champions.map(champ => [
     champ.gameId,
@@ -278,246 +251,286 @@ function writeChampionsData(ss, champions) {
   }
 }
 
+// =====================================
+// TOTALS UPDATE FUNCTIONS
+// =====================================
+
+function updateFactionTotals(ss) {
+  const matchSheet = ss.getSheetByName(CONFIG.MATCH_RESULTS_SHEET);
+  const totalsSheet = ss.getSheetByName(CONFIG.FACTION_TOTALS_SHEET);
+  if (!matchSheet || !totalsSheet) return;
+  
+  const data = matchSheet.getDataRange().getValues();
+  if (data.length <= 1) return; // Only header row
+  
+  // Skip header, aggregate by faction
+  const factionStats = {};
+  for (let i = 1; i < data.length; i++) {
+    const faction = data[i][2]; // Column C = faction
+    const winLose = data[i][5]; // Column F = winLose
+    const score = data[i][6];   // Column G = finalScore
+    
+    if (!faction) continue;
+    
+    if (!factionStats[faction]) {
+      factionStats[faction] = { wins: 0, games: 0, totalScore: 0 };
+    }
+    
+    factionStats[faction].games++;
+    factionStats[faction].totalScore += (score || 0);
+    if (winLose === 'WIN') {
+      factionStats[faction].wins++;
+    }
+  }
+  
+  // Build output rows
+  const outputRows = [['faction', 'winPercent', 'avgScore', 'gamesPlayed']];
+  for (const faction in factionStats) {
+    const stats = factionStats[faction];
+    const winPercent = stats.games > 0 ? Math.round((stats.wins / stats.games) * 100) + '%' : '0%';
+    const avgScore = stats.games > 0 ? (stats.totalScore / stats.games).toFixed(1) : '0';
+    outputRows.push([faction, winPercent, avgScore, stats.games]);
+  }
+  
+  // Clear and write
+  totalsSheet.clear();
+  totalsSheet.getRange(1, 1, outputRows.length, outputRows[0].length).setValues(outputRows);
+}
+
+function updateChampionTotals(ss) {
+  const champSheet = ss.getSheetByName(CONFIG.CHAMPIONS_SHEET);
+  const totalsSheet = ss.getSheetByName(CONFIG.CHAMPION_TOTALS_SHEET);
+  if (!champSheet || !totalsSheet) return;
+  
+  const data = champSheet.getDataRange().getValues();
+  if (data.length <= 1) return;
+  
+  // Aggregate by faction + champion
+  const champStats = {};
+  for (let i = 1; i < data.length; i++) {
+    const faction = data[i][2];      // Column C
+    const champName = data[i][3];    // Column D
+    const health = data[i][4] || 0;  // Column E
+    const wisps = data[i][6] || 0;   // Column G
+    const isDead = data[i][7];       // Column H
+    
+    if (!faction || !champName) continue;
+    
+    const key = faction + '|' + champName;
+    if (!champStats[key]) {
+      champStats[key] = { faction, champName, totalHealth: 0, totalWisps: 0, deaths: 0, count: 0 };
+    }
+    
+    champStats[key].totalHealth += health;
+    champStats[key].totalWisps += wisps;
+    champStats[key].count++;
+    if (isDead === true || isDead === 'TRUE' || isDead === 'true') {
+      champStats[key].deaths++;
+    }
+  }
+  
+  // Build output
+  const outputRows = [['faction', 'championName', 'avgWisps', 'avgHealth', 'deathPercent']];
+  for (const key in champStats) {
+    const s = champStats[key];
+    const avgWisps = (s.totalWisps / s.count).toFixed(1);
+    const avgHealth = (s.totalHealth / s.count).toFixed(1);
+    const deathPercent = Math.round((s.deaths / s.count) * 100) + '%';
+    outputRows.push([s.faction, s.champName, avgWisps, avgHealth, deathPercent]);
+  }
+  
+  totalsSheet.clear();
+  totalsSheet.getRange(1, 1, outputRows.length, outputRows[0].length).setValues(outputRows);
+}
+
+function updateCardTotals(ss) {
+  const cardSheet = ss.getSheetByName(CONFIG.DECK_CARDS_SHEET);
+  const totalsSheet = ss.getSheetByName(CONFIG.CARD_TOTALS_SHEET);
+  if (!cardSheet || !totalsSheet) return;
+  
+  const data = cardSheet.getDataRange().getValues();
+  if (data.length <= 1) return;
+  
+  // Aggregate by faction + card
+  const cardStats = {};
+  for (let i = 1; i < data.length; i++) {
+    const faction = data[i][2];   // Column C
+    const cardName = data[i][3];  // Column D
+    
+    if (!faction || !cardName) continue;
+    
+    const key = faction + '|' + cardName;
+    if (!cardStats[key]) {
+      cardStats[key] = { faction, cardName, count: 0 };
+    }
+    cardStats[key].count++;
+  }
+  
+  // Build output sorted by faction, then by count descending
+  const outputRows = [['faction', 'cardName', 'timesTaken']];
+  const sortedKeys = Object.keys(cardStats).sort((a, b) => {
+    const statsA = cardStats[a];
+    const statsB = cardStats[b];
+    if (statsA.faction !== statsB.faction) {
+      return statsA.faction.localeCompare(statsB.faction);
+    }
+    return statsB.count - statsA.count; // Higher count first
+  });
+  
+  for (const key of sortedKeys) {
+    const s = cardStats[key];
+    outputRows.push([s.faction, s.cardName, s.count]);
+  }
+  
+  totalsSheet.clear();
+  totalsSheet.getRange(1, 1, outputRows.length, outputRows[0].length).setValues(outputRows);
+}
+
+// =====================================
+// TEST FUNCTION
+// =====================================
+
 function testScript() {
-  const gameId = 'TEST_' + new Date().getTime();
-  const timestamp = new Date().toISOString();
+  const gameId = '00001';
+  const timestamp = '01-30-26 15:30';
   
   const testData = {
     gameId: gameId,
-    game: {
-      gameId: gameId,
-      timestamp: timestamp,
-      roundEnded: 5,
-      winner: 'Leafsong Nomads',
-      cardFeedback: 'Test feedback',
-      generalFeedback: 'Test general feedback'
-    },
-    factionResults: [
-      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', playerName: 'TestPlayer1', score: 8, deckSize: 30, isWinner: true, opponent: 'Boulderbreaker Clans', opponentScore: 6 },
-      { gameId: gameId, timestamp: timestamp, faction: 'Boulderbreaker Clans', playerName: 'TestPlayer2', score: 6, deckSize: 30, isWinner: false, opponent: 'Leafsong Nomads', opponentScore: 8 }
+    matchResults: [
+      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', playerName: 'TestPlayer1', roundEnded: 6, winLose: 'WIN', finalScore: 11 },
+      { gameId: gameId, timestamp: timestamp, faction: 'Boulderbreaker Clans', playerName: 'TestPlayer2', roundEnded: 6, winLose: 'LOSE', finalScore: 9 }
     ],
     deckCards: [
       { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', cardName: 'Savage Rend' },
       { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', cardName: 'Savage Rend' },
-      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', cardName: 'Savage Rend' },
+      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', cardName: 'Prancing Stride' },
+      { gameId: gameId, timestamp: timestamp, faction: 'Boulderbreaker Clans', cardName: 'Boulder Smash' },
       { gameId: gameId, timestamp: timestamp, faction: 'Boulderbreaker Clans', cardName: 'Boulder Smash' }
     ],
     champions: [
       { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', championName: 'Loresinger', finalHealth: 5, maxHealth: 10, woodwisps: 2, isDead: false },
-      { gameId: gameId, timestamp: timestamp, faction: 'Boulderbreaker Clans', championName: 'UrscarKing', finalHealth: 0, maxHealth: 21, woodwisps: 0, isDead: true }
-    ]
+      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', championName: 'Wyldspeaker', finalHealth: 0, maxHealth: 8, woodwisps: 0, isDead: true },
+      { gameId: gameId, timestamp: timestamp, faction: 'Boulderbreaker Clans', championName: 'UrscarKing', finalHealth: 8, maxHealth: 21, woodwisps: 1, isDead: false }
+    ],
+    feedback: {
+      cardFeedback: 'Savage Rend feels too strong',
+      generalFeedback: 'Great game!'
+    }
   };
   
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  writeGameData(ss, testData.game);
-  writeFactionResultsData(ss, testData.factionResults);
-  writeDeckCardsData(ss, testData.deckCards);
-  writeChampionsData(ss, testData.champions);
+  writeMatchResults(ss, testData.matchResults, testData.feedback);
+  writeDeckCards(ss, testData.deckCards);
+  writeChampions(ss, testData.champions);
+  updateFactionTotals(ss);
+  updateChampionTotals(ss);
+  updateCardTotals(ss);
   
   console.log('Test data written successfully!');
 }
+
+// Manually recalculate all totals (run this if totals seem off)
+function recalculateAllTotals() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  updateFactionTotals(ss);
+  updateChampionTotals(ss);
+  updateCardTotals(ss);
+  console.log('All totals recalculated!');
+}
 ```
 
-### Step 6: Save the Script
+### Step 6: Save and Deploy
 
-1. Click the **floppy disk icon** (or press **Ctrl+S** / **Cmd+S**)
-2. If prompted, name the project **"Wyldwood Data Receiver"**
-
-### Step 7: Deploy as a Web App
-
-1. Click the blue **Deploy** button (top-right)
-2. Select **New deployment**
-3. Click the **gear icon** next to "Select type"
-4. Choose **Web app**
-5. Fill in the settings:
-   - **Description:** `Wyldwood Playtest Receiver v1`
-   - **Execute as:** `Me (your email)`
+1. Click the **floppy disk icon** to save
+2. Name the project **"Wyldwood Data Receiver"**
+3. Click **Deploy** → **New deployment**
+4. Click the **gear icon** → select **Web app**
+5. Set:
+  - **Description:** `Wyldwood`
+   - **Execute as:** `Me`
    - **Who has access:** `Anyone`
 6. Click **Deploy**
-7. Click **Authorize access** when prompted
-8. Sign in with your Google account
-9. If you see "Google hasn't verified this app," click **Advanced** → **Go to Wyldwood Data Receiver (unsafe)**
-10. Click **Allow**
+7. **Authorize** when prompted (click Advanced → Go to Wyldwood... if needed)
+8. **Copy the Web App URL**
 
-### Step 8: Copy Your Web App URL
+### Step 7: Update the TTS Script
 
-After deployment, you'll see a URL that looks like:
-```
-https://script.google.com/macros/s/AKfycby...very-long-string.../exec
-```
-
-**Copy this entire URL** — you'll need it for the next step.
-
-### Step 9: Update the TTS Script
-
-1. In Tabletop Simulator, find the **GameTracker** object
-2. Right-click it and select **Scripting** → **Lua Script**
-3. Near the top, find this line:
-   ```lua
-   WEBHOOK_URL = "https://script.google.com/macros/s/YOUR_SCRIPT_ID_HERE/exec",
-   ```
-4. Replace `YOUR_SCRIPT_ID_HERE` with your actual Web App URL
-5. Save the script (**Save & Play** or **Ctrl+S**)
+In Tabletop Simulator:
+1. Find the **GameTracker** object
+2. Open its Lua script
+3. Find the `WEBHOOK_URL` line near the top
+4. Replace it with your new Web App URL
+5. Save
 
 ---
 
 ## Testing Your Setup
 
-### Test 1: Script Test (Apps Script)
+### Test the Google Script
 
-1. Go back to your Apps Script tab
-2. In the function dropdown (next to the play button), select **testScript**
-3. Click the **Run** button (▶)
-4. Go to your Google Sheet and check all four tabs — you should see test data
+1. In Apps Script, select **testScript** from the function dropdown
+2. Click **Run** (▶)
+3. Check your sheets - you should see test data appear
+4. The Totals sheets should auto-populate
 
-### Test 2: Full Test (Tabletop Simulator)
+### Test from TTS
 
-1. Load Wyldwood in TTS
-2. Play a quick game or set up a test scenario
-3. Click the **Submit Playtest Data** button on the GameTracker
-4. Fill in some feedback and click **Submit**
-5. Check your Google Sheet — new data should appear in all four tabs
+1. Play a quick game in Tabletop Simulator
+2. Click **Submit Playtest Data** when the game ends
+3. Check Google Sheets for the new data
 
 ---
 
-## Analyzing Your Data
+## Understanding the Totals
 
-### Quick Stats (Games Sheet)
+### Faction Totals
+Shows overall balance between factions:
+- **Win %** — Higher = faction might be too strong
+- **Avg Score** — Compare across factions for balance
+- **Games Played** — Confidence in the data
 
-**Total Matches Played:**
-```
-=COUNTA(A2:A)
-```
+### Champion Totals
+Shows which champions are performing well:
+- **Avg Wisps** — Higher = champion is collecting more wisps
+- **Avg Health** — Higher = champion survives with more health
+- **Death %** — Higher = champion dies more often (might be too weak or focused)
 
-**Average Game Length (rounds):**
-```
-=AVERAGE(C2:C)
-```
-
-### Faction Stats (FactionResults Sheet — The Main Analysis Sheet!)
-
-This is where the magic happens. Each game creates two rows here (one per faction), making it trivial to analyze any faction:
-
-**Games Played by Faction:**
-```
-=COUNTIF(C:C,"Leafsong Nomads")
-=COUNTIF(C:C,"Boulderbreaker Clans")
-```
-
-**Win Rate for Any Faction:**
-```
-=COUNTIFS(C:C,"Leafsong Nomads",G:G,TRUE)/COUNTIF(C:C,"Leafsong Nomads")
-```
-
-**Average Score for a Faction:**
-```
-=AVERAGEIF(C:C,"Leafsong Nomads",E:E)
-```
-
-**Average Score Differential (Win Margin):**
-```
-=AVERAGEIFS(E:E,C:C,"Leafsong Nomads",G:G,TRUE) - AVERAGEIFS(I:I,C:C,"Leafsong Nomads",G:G,TRUE)
-```
-
-**Filter All Games for One Faction:**
-Use Filter: `Data → Create a filter` then filter column C (faction) by name
-
-**All Matches Where a Specific Faction Won (from Games sheet):**
-Use Filter: `Data → Create a filter` then filter column D (winner) by faction name
-
-> **Pro tip:** For detailed faction analysis, use the **FactionResults** sheet instead — it's designed for faction-centric queries!
-
-### Card Analysis (DeckCards Sheet)
-
-**Most Popular Cards (Create a Pivot Table):**
-1. Select all data (Ctrl+A)
-2. Go to **Insert** → **Pivot table**
-3. Set **Rows** to `cardName`
-4. Set **Values** to `cardName` (summarize by COUNTA)
-5. Sort by count descending
-
-**Cards Used by Faction:**
-```
-=COUNTIFS(C:C,"Leafsong Nomads",D:D,"Card Name Here")
-```
-
-**Most Popular Cards for Any Faction (Pivot Table):**
-1. Create pivot table
-2. Add filter on `faction`
-3. Rows: cardName, Values: COUNTA
-4. Filter by whichever faction you want to analyze
-
-### Champion Analysis (Champions Sheet)
-
-**Champion Survival Rate:**
-```
-=1 - (COUNTIF(H2:H,TRUE)/COUNTA(H2:H))
-```
-
-**Average Health Remaining by Champion:**
-```
-=AVERAGEIF(D:D,"Loresinger",E:E)
-```
-
-**Total Woodwisps by Faction:**
-```
-=SUMIF(C:C,"Leafsong Nomads",G:G)
-```
-
----
-
-## Creating Charts
-
-### Card Popularity Bar Chart
-1. Create a Pivot Table of DeckCards (cardName → count)
-2. Select the results
-3. **Insert** → **Chart** → **Bar chart**
-
-### Faction Win Rate Pie Chart
-1. In a new area, calculate wins per faction using COUNTIF on the winner column
-2. Select the data
-3. **Insert** → **Chart** → **Pie chart**
-
-### Champion Death Rate by Faction
-1. Create a Pivot Table: Rows = faction, Values = COUNT of isDead where TRUE
-2. Insert a bar chart
+### Card Totals
+Shows card popularity by faction:
+- **Times Taken** — Higher = card is popular (powerful? necessary? or just fun?)
+- Compare similar cards to see which gets picked more
 
 ---
 
 ## Troubleshooting
 
-### "Error submitting data" appears in TTS
-- Double-check your Web App URL is correct (no extra spaces)
-- Make sure the script is deployed with **"Anyone"** access
-- Check Apps Script logs: **View** → **Executions**
+### Data not appearing
+- Check that all 6 sheets exist with correct names
+- Check column headers match exactly
+- Run `testScript()` to verify the script works
 
-### Data not appearing in sheets
-- Verify sheet names are exactly: `Games`, `FactionResults`, `DeckCards`, `Champions`
-- Check that column headers match the expected names
-- Run `testScript()` in Apps Script to verify it works
+### Totals not updating
+- Run `recalculateAllTotals()` manually from Apps Script
+- Check for errors in Apps Script logs (View → Executions)
 
-### Permission errors
-- Re-deploy the web app (Deploy → Manage deployments → Edit → New version)
-- Make sure you authorized the script when prompted
+### "Unknown" faction appearing
+- Check that champion GUIDs in the TTS script match your actual champions
+- The faction detection relies on finding champions by GUID
 
----
-
-## Updating the Script Later
-
-If you need to make changes:
-
-1. Edit the code in Apps Script
-2. Click **Deploy** → **Manage deployments**
-3. Click the **pencil icon** to edit
-4. Change **Version** to **"New version"**
-5. Click **Deploy**
-
-The URL stays the same — no changes needed in TTS!
+### Scores showing as 0
+- Make sure the game actually ended (scores should be on the score trackers)
+- Check that score trackers have the `getTotalVP` function
 
 ---
 
-## Questions?
+## Current Champion Reference
 
-If you run into issues, check:
-1. Apps Script execution logs (**View** → **Executions**)
-2. Run `testScript()` to verify the Google side works
+| Leafsong Nomads | Boulderbreaker Clans |
+|-----------------|---------------------|
+| Loresinger | UrscarKing |
+| HighSpiritseer | FellcastHunter |
+| BonebladeAlpha | MakaraElder |
+| Wyldspeaker | OutcastKingsguard |
+| WyrdbowSentinel | Painseeker |
+
+*New factions will automatically appear in totals when added to the game!*
