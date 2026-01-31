@@ -5,21 +5,19 @@ This guide explains how to set up Google Sheets to receive playtest data from Ta
 ## Overview
 
 The system works as follows:
-1. TTS sends playtest data (including player SteamIDs) via HTTP POST to a Google Apps Script web app
+1. TTS sends playtest data (including player SteamIDs) from the GameTracker.5f1e44.lua object via HTTP POST to a Google Apps Script web app
 2. The script checks if any player has submitted data in the last 30 minutes (spam protection)
 3. If cooldown check passes, data is written to the appropriate sheets
 4. The script returns success/failure status back to TTS
 
 ## Sheet Structure
 
-Your Google Sheet needs **7 sheets** with these exact names:
+Your Google Sheet needs **5 sheets** with these exact names:
 1. **MatchResults** - Raw match data (timestamp, gameId, winner, loser, factions, steamIds)
 2. **FactionTotals** - Aggregated win/loss stats per faction
 3. **ChampionTotals** - Aggregated win/loss stats per champion
 4. **CardTotals** - Aggregated card usage statistics
 5. **Feedback** - Player feedback after each match
-6. **DATADeckCards** - Reference data for deck cards
-7. **DATAChampions** - Reference data for champions
 
 ## Setup Instructions
 
@@ -31,7 +29,7 @@ Your Google Sheet needs **7 sheets** with these exact names:
 
 ### Step 2: Create the Required Sheets
 
-Create 7 sheets with these exact names and column headers:
+Create 5 sheets with these exact names and column headers:
 
 #### Sheet 1: MatchResults
 Column headers (Row 1):
@@ -62,12 +60,6 @@ Column headers (Row 1):
 ```
 gameId | winningFaction | winningPlayerName | losingPlayerName | cardFeedback | gameFeedback
 ```
-
-#### Sheet 6: DATADeckCards
-This sheet contains your card reference data. Add your card data here.
-
-#### Sheet 7: DATAChampions
-This sheet contains your champion reference data. Add your champion data here.
 
 ### Step 3: Create the Google Apps Script
 
@@ -109,8 +101,6 @@ function doPost(e) {
     
     // Write the data to sheets
     writeMatchResults(ss, data);
-    writeDeckCards(ss, data);
-    writeChampions(ss, data);
     writeFeedback(ss, data);
     
     // Update aggregated totals
@@ -257,22 +247,6 @@ function writeMatchResults(ss, data) {
   ];
   
   sheet.appendRow(row);
-}
-
-function writeDeckCards(ss, data) {
-  // This function processes deck card data
-  // Implement based on your deckCards data structure
-  if (!data.deckCards) return;
-  
-  Logger.log('Deck cards received: ' + JSON.stringify(data.deckCards));
-}
-
-function writeChampions(ss, data) {
-  // This function processes champion data
-  // Implement based on your champions data structure
-  if (!data.champions) return;
-  
-  Logger.log('Champions received: ' + JSON.stringify(data.champions));
 }
 
 function writeFeedback(ss, data) {
@@ -536,11 +510,11 @@ function testScript() {
    - **Who has access**: "Anyone"
 4. Click **Deploy**
 5. **Authorize** the app when prompted
-6. **Copy the Web App URL** - you'll need this for TTS
+6. **Copy the Web App URL** - you'll need this for the Lua script in TTS 
 
 ### Step 5: Configure TTS
 
-Update the `GOOGLE_SHEETS_URL` in your TTS script (GameTracker.lua) with the Web App URL you copied:
+Update the `GOOGLE_SHEETS_URL` in your TTS script (GameTracker.lua) with the Web App URL you copied. It looks like this in the TTS script:
 
 ```lua
 local GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
