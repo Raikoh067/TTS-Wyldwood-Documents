@@ -481,27 +481,6 @@ In Tabletop Simulator:
 
 ---
 
-## Understanding the Totals
-
-### Faction Totals
-Shows overall balance between factions:
-- **Win %** — Higher = faction might be too strong
-- **Avg Score** — Compare across factions for balance
-- **Games Played** — Confidence in the data
-
-### Champion Totals
-Shows which champions are performing well:
-- **Avg Wisps** — Higher = champion is collecting more wisps
-- **Avg Health** — Higher = champion survives with more health
-- **Death %** — Higher = champion dies more often (might be too weak or focused)
-
-### Card Totals
-Shows card popularity by faction:
-- **Times Taken** — Higher = card is popular (powerful? necessary? or just fun?)
-- Compare similar cards to see which gets picked more
-
----
-
 ## Troubleshooting
 
 ### Data not appearing
@@ -513,24 +492,4 @@ Shows card popularity by faction:
 - Run `recalculateAllTotals()` manually from Apps Script
 - Check for errors in Apps Script logs (View → Executions)
 
-### "Unknown" faction appearing
-- Check that champion GUIDs in the TTS script match your actual champions
-- The faction detection relies on finding champions by GUID
-
-### Scores showing as 0
-- Make sure the game actually ended (scores should be on the score trackers)
-- Check that score trackers have the `getTotalVP` function
-
 ---
-
-## Current Champion Reference
-
-| Leafsong Nomads | Boulderbreaker Clans |
-|-----------------|---------------------|
-| Loresinger | UrscarKing |
-| HighSpiritseer | FellcastHunter |
-| BonebladeAlpha | MakaraElder |
-| Wyldspeaker | OutcastKingsguard |
-| WyrdbowSentinel | Painseeker |
-
-*New factions will automatically appear in totals when added to the game!*
