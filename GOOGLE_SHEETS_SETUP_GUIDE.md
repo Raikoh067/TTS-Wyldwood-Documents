@@ -1,681 +1,634 @@
-# Wyldwood Playtest Data Collection
-## Google Sheets Setup Guide
+# Google Sheets Playtest Data Collection Setup Guide
 
----
+This guide explains how to set up Google Sheets to receive playtest data from Tabletop Simulator.
 
-## What This System Does
+## Overview
 
-This playtest data collection system automatically captures detailed game statistics from your Wyldwood sessions and sends them to a Google Sheets database. This is focused on Totals - providing summary statistics at a glance.
+The system works as follows:
+1. TTS sends playtest data (including player SteamIDs) via HTTP POST to a Google Apps Script web app
+2. The script checks if any player has submitted data in the last 30 minutes (spam protection)
+3. If cooldown check passes, data is written to the appropriate sheets
+4. The script returns success/failure status back to TTS
 
-### Key Features:
-- **Faction Totals** — Win rates, average scores per faction
-- **Champion Totals** — Average health, woodwisps held, death rates per champion
-- **Card Totals** — How many times each card has been taken across all games
-- **Match Results** — Complete log of every match played
-- **Spam Protection** — 30-minute cooldown per SteamID prevents duplicate/spam submissions
+## Sheet Structure
 
----
-
-## Sheet Structure Overview
-
-### Main Sheets (Auto-Updated Summary Stats)
-These sheets show running totals that update automatically after each match submission.
-
-| Sheet | Purpose |
-|-------|---------|
-| **MatchResults** | Two rows per match (one per faction), the main match log |
-| **FactionTotals** | Win %, average score per faction |
-| **ChampionTotals** | Average wisps, average health, death % per champion |
-| **CardTotals** | Times taken per card per faction |
-
-### Raw Data Sheets (Individual Match Data)
-While they aren't useful to read, they are used to store the raw data used to calculate totals. 
-
-| Sheet | Purpose |
-|-------|---------|
-| **DATADeckCards** | Raw card picks (used only for Card Totals) |
-| **DATAChampions** | Raw champion stats (used only for Champion Totals) |
-
----
-
-## Data Format
-
-### Match Results (2 rows per game)
-| GameID | Timestamp | Faction | Player Name | SteamID | Round Ended | Win/Lose | Final Score |
-|--------|-----------|---------|-------------|---------|-------------|----------|-------------|
-| 00001 | 01-31-26 23:59 | Leafsong Nomads | Raikoh | 76561198012345678 | 6 | LOSE | 9 |
-| 00001 | 01-31-26 23:59 | Boulderbreaker Clans | Brian | 76561198087654321 | 6 | WIN | 11 |
-
-### Faction Totals
-| Faction | Win % | Average Score | Games Played |
-|---------|-------|---------------|--------------|
-| Leafsong Nomads | 52% | 9.3 | 25 |
-| Boulderbreaker Clans | 48% | 9.1 | 25 |
-
-### Champion Totals
-| Faction | Champion Name | Average Wisps Held | Average Health | Death % |
-|---------|---------------|--------------------| ---------------|---------|
-| Leafsong Nomads | Loresinger | 1.8 | 6.5 | 19% |
-
-### Card Totals
-| Faction | Card Name | Times Taken |
-|---------|-----------|-------------|
-| Leafsong Nomads | Prancing Stride | 98 |
-
----
+Your Google Sheet needs **7 sheets** with these exact names:
+1. **MatchResults** - Raw match data (timestamp, gameId, winner, loser, factions, steamIds)
+2. **FactionTotals** - Aggregated win/loss stats per faction
+3. **ChampionTotals** - Aggregated win/loss stats per champion
+4. **CardTotals** - Aggregated card usage statistics
+5. **Feedback** - Player feedback after each match
+6. **DATADeckCards** - Reference data for deck cards
+7. **DATAChampions** - Reference data for champions
 
 ## Setup Instructions
 
-### Step 1: Create Your Google Sheet
+### Step 1: Create the Google Sheet
 
-1. Go to [sheets.google.com](https://sheets.google.com)
-2. Click the **+ Blank** button to create a new spreadsheet
-3. Name it **"Wyldwood Playtest Data"**
+1. Go to [Google Sheets](https://sheets.google.com)
+2. Create a new blank spreadsheet
+3. Name it something like "Playtest Data"
 
 ### Step 2: Create the Required Sheets
 
-Create these 6 sheet tabs in this order (the order doesn't affect the script, it's just for clarity):
+Create 7 sheets with these exact names and column headers:
 
-1. **MatchResults** — Rename "Sheet1" to this
-2. **FactionTotals** — Click + to add
-3. **ChampionTotals** — Click + to add
-4. **CardTotals** — Click + to add
-5. **DATADeckCards** — Click + to add
-6. **DATAChampions** — Click + to add
+#### Sheet 1: MatchResults
+Column headers (Row 1):
+```
+timestamp | gameId | winningFaction | losingFaction | winningChampion | losingChampion | winningPlayer | losingPlayer | winningSteamId | losingSteamId
+```
 
-### Step 3: Add Column Headers
+#### Sheet 2: FactionTotals
+Column headers (Row 1):
+```
+faction | wins | losses | winRate
+```
 
-#### MatchResults Sheet
-| A | B | C | D | E | F | G | H |
-|---|---|---|---|---|---|---|---|
-| gameId | timestamp | faction | playerName | steamId | roundEnded | winLose | finalScore |
+#### Sheet 3: ChampionTotals
+Column headers (Row 1):
+```
+champion | faction | wins | losses | winRate
+```
 
-#### DATADeckCards Sheet
-| A | B | C | D |
-|---|---|---|---|
-| gameId | timestamp | faction | cardName |
+#### Sheet 4: CardTotals
+Column headers (Row 1):
+```
+cardName | faction | inWinningDeck | inLosingDeck | totalAppearances | winRate
+```
 
-#### DATAChampions Sheet
-| A | B | C | D | E | F | G | H |
-|---|---|---|---|---|---|---|---|
-| gameId | timestamp | faction | championName | finalHealth | maxHealth | woodwisps | isDead |
+#### Sheet 5: Feedback
+Column headers (Row 1):
+```
+gameId | winningFaction | winningPlayerName | losingPlayerName | cardFeedback | gameFeedback
+```
 
-#### FactionTotals Sheet
-| A | B | C | D |
-|---|---|---|---|
-| faction | winPercent | avgScore | gamesPlayed |
+#### Sheet 6: DATADeckCards
+This sheet contains your card reference data. Add your card data here.
 
-#### ChampionTotals Sheet
-| A | B | C | D | E |
-|---|---|---|---|---|
-| faction | championName | avgWisps | avgHealth | deathPercent |
+#### Sheet 7: DATAChampions
+This sheet contains your champion reference data. Add your champion data here.
 
-#### CardTotals Sheet
-| A | B | C |
-|---|---|---|
-| faction | cardName | timesTaken |
+### Step 3: Create the Google Apps Script
 
-### Step 4: Open Google Apps Script
-
-1. In your Google Sheet, click **Extensions** → **Apps Script**
-2. **Delete** everything in the editor
-3. Paste the script below
-
-### Step 5: Paste the Webhook Script
+1. In your Google Sheet, go to **Extensions > Apps Script**
+2. Delete any existing code in the editor
+3. Paste the following code:
 
 ```javascript
-/**
- * Wyldwood Playtest Data Receiver
- * Receives game data from Tabletop Simulator and writes to Google Sheets
- * Includes spam protection via 30-minute cooldown per SteamID
- * Cooldown is checked against existing MatchResults - no separate sheet needed
- */
-
+// ============================================
+// CONFIGURATION
+// ============================================
 const CONFIG = {
   MATCH_RESULTS_SHEET: 'MatchResults',
-  DECK_CARDS_SHEET: 'DATADeckCards',
-  CHAMPIONS_SHEET: 'DATAChampions',
   FACTION_TOTALS_SHEET: 'FactionTotals',
   CHAMPION_TOTALS_SHEET: 'ChampionTotals',
   CARD_TOTALS_SHEET: 'CardTotals',
-  
-  // Cooldown duration in minutes
+  FEEDBACK_SHEET: 'Feedback',
   COOLDOWN_MINUTES: 30
 };
 
+// ============================================
+// MAIN ENTRY POINT
+// ============================================
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
-    console.log('Received playtest data for game: ' + data.gameId);
-    
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
-    // Check cooldowns by looking at MatchResults for recent submissions by these SteamIDs
-    const cooldownCheck = checkCooldowns(ss, data.steamIds || []);
-    if (cooldownCheck.blocked) {
-      console.log('Submission blocked due to cooldown. Minutes remaining: ' + cooldownCheck.minutesRemaining);
-      return ContentService
-        .createTextOutput(JSON.stringify({
-          status: 'cooldown',
-          message: 'Please wait before submitting again',
-          minutesRemaining: cooldownCheck.minutesRemaining,
-          blockedSteamId: cooldownCheck.blockedSteamId
-        }))
-        .setMimeType(ContentService.MimeType.JSON);
+    // Check cooldown for all submitted SteamIDs
+    const cooldownResult = checkCooldowns(ss, data.steamIds || []);
+    if (!cooldownResult.allowed) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        error: 'cooldown',
+        message: cooldownResult.message,
+        remainingMinutes: cooldownResult.remainingMinutes
+      })).setMimeType(ContentService.MimeType.JSON);
     }
     
-    // Write raw data
-    writeMatchResults(ss, data.matchResults, data.feedback);
-    writeDeckCards(ss, data.deckCards);
-    writeChampions(ss, data.champions);
+    // Write the data to sheets
+    writeMatchResults(ss, data);
+    writeDeckCards(ss, data);
+    writeChampions(ss, data);
+    writeFeedback(ss, data);
     
-    // Update totals
-    updateFactionTotals(ss);
-    updateChampionTotals(ss);
-    updateCardTotals(ss);
+    // Update aggregated totals
+    updateFactionTotals(ss, data);
+    updateChampionTotals(ss, data);
+    updateCardTotals(ss, data);
     
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        status: 'success',
-        message: 'Data recorded and totals updated',
-        gameId: data.gameId
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-      
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      message: 'Data recorded successfully'
+    })).setMimeType(ContentService.MimeType.JSON);
+    
   } catch (error) {
-    console.error('Error: ' + error.toString());
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        status: 'error',
-        message: error.toString()
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: 'server_error',
+      message: error.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-function doGet(e) {
-  return ContentService
-    .createTextOutput(JSON.stringify({
-      status: 'ok',
-      message: 'Wyldwood Playtest Data Receiver is running'
-    }))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-// =====================================
-// COOLDOWN / SPAM PROTECTION FUNCTIONS
-// =====================================
-
-/**
- * Check if any of the provided SteamIDs have submitted within the cooldown period
- * by looking at the MatchResults sheet timestamps
- * 
- * @param {Spreadsheet} ss - The active spreadsheet
- * @param {string[]} steamIds - Array of SteamIDs to check
- * @returns {Object} - {blocked: boolean, minutesRemaining: number, blockedSteamId: string}
- */
+// ============================================
+// COOLDOWN FUNCTIONS
+// ============================================
 function checkCooldowns(ss, steamIds) {
   if (!steamIds || steamIds.length === 0) {
-    // No SteamIDs provided, allow submission (might be single player or test)
-    return { blocked: false };
-  }
-  
-  // Filter out "Unknown" SteamIDs
-  const validSteamIds = steamIds.filter(id => id && id !== 'Unknown');
-  if (validSteamIds.length === 0) {
-    return { blocked: false };
+    // No SteamIDs provided - allow submission but log warning
+    Logger.log('Warning: No SteamIDs provided for cooldown check');
+    return { allowed: true };
   }
   
   const sheet = ss.getSheetByName(CONFIG.MATCH_RESULTS_SHEET);
   if (!sheet) {
-    console.log('MatchResults sheet not found, skipping cooldown check');
-    return { blocked: false };
-  }
-  
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) {
-    // Only header row, no previous submissions
-    return { blocked: false };
+    Logger.log('Warning: MatchResults sheet not found');
+    return { allowed: true };
   }
   
   const now = new Date();
   const cooldownMs = CONFIG.COOLDOWN_MINUTES * 60 * 1000;
+  const cutoffTime = new Date(now.getTime() - cooldownMs);
   
-  // Find the most recent submission timestamp for each SteamID we're checking
-  // MatchResults format: gameId | timestamp | faction | playerName | steamId | roundEnded | winLose | finalScore
-  // Columns:               0    |     1     |    2    |     3      |    4    |     5      |    6    |     7
+  // Get all data from MatchResults
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    // Only header row or empty - no previous submissions
+    return { allowed: true };
+  }
   
-  for (let i = 1; i < data.length; i++) {
-    const rowSteamId = String(data[i][4]); // Column E = steamId
-    const rowTimestamp = data[i][1];       // Column B = timestamp
+  // Find column indices (assuming headers in row 1)
+  const headers = data[0];
+  const timestampCol = headers.indexOf('timestamp');
+  const winningSteamIdCol = headers.indexOf('winningSteamId');
+  const losingSteamIdCol = headers.indexOf('losingSteamId');
+  
+  if (timestampCol === -1 || winningSteamIdCol === -1 || losingSteamIdCol === -1) {
+    Logger.log('Warning: Required columns not found in MatchResults');
+    return { allowed: true };
+  }
+  
+  // Check each row for matching SteamIDs within cooldown period
+  for (let i = data.length - 1; i >= 1; i--) {
+    const row = data[i];
+    const rowTimestamp = parseTimestamp(row[timestampCol]);
     
-    // Check if this row's SteamID matches any we're checking
-    if (validSteamIds.includes(rowSteamId)) {
-      // Parse the timestamp (format: "MM-DD-YY HH:MM")
-      const submissionTime = parseTimestamp(rowTimestamp);
-      
-      if (submissionTime) {
-        const timeSinceSubmission = now - submissionTime;
+    if (!rowTimestamp || rowTimestamp < cutoffTime) {
+      // This row is outside cooldown period, and since we're going backwards
+      // through time, all remaining rows will also be outside cooldown
+      break;
+    }
+    
+    const rowWinnerSteamId = String(row[winningSteamIdCol]);
+    const rowLoserSteamId = String(row[losingSteamIdCol]);
+    
+    // Check if any submitted SteamID matches this row
+    for (const steamId of steamIds) {
+      if (String(steamId) === rowWinnerSteamId || String(steamId) === rowLoserSteamId) {
+        const elapsedMs = now.getTime() - rowTimestamp.getTime();
+        const remainingMs = cooldownMs - elapsedMs;
+        const remainingMinutes = Math.ceil(remainingMs / 60000);
         
-        if (timeSinceSubmission < cooldownMs) {
-          // This SteamID submitted within the cooldown period
-          const minutesRemaining = Math.ceil((cooldownMs - timeSinceSubmission) / (1000 * 60));
-          return {
-            blocked: true,
-            minutesRemaining: minutesRemaining,
-            blockedSteamId: rowSteamId
-          };
-        }
+        return {
+          allowed: false,
+          message: `SteamID ${steamId} submitted data ${Math.floor(elapsedMs / 60000)} minutes ago. Please wait ${remainingMinutes} more minute(s).`,
+          remainingMinutes: remainingMinutes
+        };
       }
     }
   }
   
-  return { blocked: false };
+  return { allowed: true };
 }
 
-/**
- * Parse a timestamp string in format "MM-DD-YY HH:MM" into a Date object
- * @param {string|Date} timestamp - The timestamp to parse
- * @returns {Date|null} - Parsed Date or null if invalid
- */
-function parseTimestamp(timestamp) {
-  if (!timestamp) return null;
+function parseTimestamp(value) {
+  if (!value) return null;
   
-  // If it's already a Date object (Google Sheets might auto-convert), use it directly
-  if (timestamp instanceof Date) {
-    return timestamp;
+  // If it's already a Date object
+  if (value instanceof Date) {
+    return value;
   }
   
-  // Parse string format "MM-DD-YY HH:MM"
-  const str = String(timestamp);
-  const match = str.match(/^(\d{2})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})$/);
-  
-  if (match) {
-    const month = parseInt(match[1], 10) - 1; // JS months are 0-indexed
-    const day = parseInt(match[2], 10);
-    let year = parseInt(match[3], 10);
-    const hour = parseInt(match[4], 10);
-    const minute = parseInt(match[5], 10);
-    
-    // Convert 2-digit year to 4-digit (assumes 2000s)
-    year = year + 2000;
-    
-    return new Date(year, month, day, hour, minute);
+  // If it's a string, try to parse it
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    if (!isNaN(parsed.getTime())) {
+      return parsed;
+    }
   }
   
-  // Try parsing as a generic date string
-  const parsed = new Date(str);
-  if (!isNaN(parsed.getTime())) {
-    return parsed;
+  // If it's a number (Excel serial date)
+  if (typeof value === 'number') {
+    // Google Sheets uses 1899-12-30 as epoch
+    const excelEpoch = new Date(1899, 11, 30);
+    return new Date(excelEpoch.getTime() + value * 24 * 60 * 60 * 1000);
   }
   
   return null;
 }
 
-// =====================================
-// RAW DATA WRITING FUNCTIONS
-// =====================================
-
-function writeMatchResults(ss, matchResults, feedback) {
+// ============================================
+// DATA WRITING FUNCTIONS
+// ============================================
+function writeMatchResults(ss, data) {
   const sheet = ss.getSheetByName(CONFIG.MATCH_RESULTS_SHEET);
-  if (!sheet) throw new Error('MatchResults sheet not found');
+  if (!sheet || !data.matchResults) return;
   
-  const rows = matchResults.map(mr => [
-    mr.gameId,
-    mr.timestamp,
-    mr.faction,
-    mr.playerName,
-    mr.steamId || 'Unknown',
-    mr.roundEnded,
-    mr.winLose,
-    mr.finalScore
-  ]);
+  const mr = data.matchResults;
   
-  if (rows.length > 0) {
-    const startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+  // Extract SteamIDs from the steamIds array
+  // Format: [winningSteamId, losingSteamId]
+  const winningSteamId = data.steamIds && data.steamIds.length > 0 ? data.steamIds[0] : '';
+  const losingSteamId = data.steamIds && data.steamIds.length > 1 ? data.steamIds[1] : '';
+  
+  const row = [
+    new Date(),                    // timestamp
+    data.gameId || '',             // gameId
+    mr.winningFaction || '',       // winningFaction
+    mr.losingFaction || '',        // losingFaction
+    mr.winningChampion || '',      // winningChampion
+    mr.losingChampion || '',       // losingChampion
+    mr.winningPlayer || '',        // winningPlayer
+    mr.losingPlayer || '',         // losingPlayer
+    winningSteamId,                // winningSteamId
+    losingSteamId                  // losingSteamId
+  ];
+  
+  sheet.appendRow(row);
+}
+
+function writeDeckCards(ss, data) {
+  // This function processes deck card data
+  // Implement based on your deckCards data structure
+  if (!data.deckCards) return;
+  
+  Logger.log('Deck cards received: ' + JSON.stringify(data.deckCards));
+}
+
+function writeChampions(ss, data) {
+  // This function processes champion data
+  // Implement based on your champions data structure
+  if (!data.champions) return;
+  
+  Logger.log('Champions received: ' + JSON.stringify(data.champions));
+}
+
+function writeFeedback(ss, data) {
+  const sheet = ss.getSheetByName(CONFIG.FEEDBACK_SHEET);
+  if (!sheet) {
+    Logger.log('Warning: Feedback sheet not found');
+    return;
   }
   
-  // Log feedback (could be stored in a separate column or sheet if desired)
-  if (feedback && (feedback.cardFeedback || feedback.generalFeedback)) {
-    console.log('Card Feedback: ' + (feedback.cardFeedback || 'None'));
-    console.log('General Feedback: ' + (feedback.generalFeedback || 'None'));
+  // Only write if there's actual feedback content
+  const cardFeedback = data.feedback?.cardFeedback || '';
+  const gameFeedback = data.feedback?.gameFeedback || '';
+  
+  if (!cardFeedback && !gameFeedback) {
+    Logger.log('No feedback provided - skipping feedback write');
+    return;
+  }
+  
+  const mr = data.matchResults || {};
+  
+  const row = [
+    data.gameId || '',             // gameId
+    mr.winningFaction || '',       // winningFaction
+    mr.winningPlayer || '',        // winningPlayerName
+    mr.losingPlayer || '',         // losingPlayerName
+    cardFeedback,                  // cardFeedback
+    gameFeedback                   // gameFeedback
+  ];
+  
+  sheet.appendRow(row);
+  Logger.log('Feedback written: ' + JSON.stringify(row));
+}
+
+// ============================================
+// AGGREGATION FUNCTIONS
+// ============================================
+function updateFactionTotals(ss, data) {
+  if (!data.matchResults) return;
+  
+  const sheet = ss.getSheetByName(CONFIG.FACTION_TOTALS_SHEET);
+  if (!sheet) return;
+  
+  const mr = data.matchResults;
+  const winningFaction = mr.winningFaction;
+  const losingFaction = mr.losingFaction;
+  
+  if (!winningFaction || !losingFaction) return;
+  
+  // Get existing data
+  const dataRange = sheet.getDataRange();
+  const values = dataRange.getValues();
+  
+  // Find or create rows for each faction
+  let winnerRow = -1;
+  let loserRow = -1;
+  
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === winningFaction) winnerRow = i + 1;
+    if (values[i][0] === losingFaction) loserRow = i + 1;
+  }
+  
+  // Update winner
+  if (winnerRow === -1) {
+    sheet.appendRow([winningFaction, 1, 0, '=B' + (sheet.getLastRow() + 1) + '/(B' + (sheet.getLastRow() + 1) + '+C' + (sheet.getLastRow() + 1) + ')']);
+  } else {
+    const currentWins = sheet.getRange(winnerRow, 2).getValue() || 0;
+    sheet.getRange(winnerRow, 2).setValue(currentWins + 1);
+  }
+  
+  // Update loser
+  if (loserRow === -1) {
+    sheet.appendRow([losingFaction, 0, 1, '=B' + (sheet.getLastRow() + 1) + '/(B' + (sheet.getLastRow() + 1) + '+C' + (sheet.getLastRow() + 1) + ')']);
+  } else {
+    const currentLosses = sheet.getRange(loserRow, 3).getValue() || 0;
+    sheet.getRange(loserRow, 3).setValue(currentLosses + 1);
   }
 }
 
-function writeDeckCards(ss, deckCards) {
-  const sheet = ss.getSheetByName(CONFIG.DECK_CARDS_SHEET);
-  if (!sheet) throw new Error('DATADeckCards sheet not found');
+function updateChampionTotals(ss, data) {
+  if (!data.matchResults) return;
   
-  const rows = deckCards.map(card => [
-    card.gameId,
-    card.timestamp,
-    card.faction,
-    card.cardName
-  ]);
+  const sheet = ss.getSheetByName(CONFIG.CHAMPION_TOTALS_SHEET);
+  if (!sheet) return;
   
-  if (rows.length > 0) {
-    const startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+  const mr = data.matchResults;
+  
+  // Update winning champion
+  if (mr.winningChampion && mr.winningFaction) {
+    updateChampionRow(sheet, mr.winningChampion, mr.winningFaction, true);
+  }
+  
+  // Update losing champion
+  if (mr.losingChampion && mr.losingFaction) {
+    updateChampionRow(sheet, mr.losingChampion, mr.losingFaction, false);
   }
 }
 
-function writeChampions(ss, champions) {
-  const sheet = ss.getSheetByName(CONFIG.CHAMPIONS_SHEET);
-  if (!sheet) throw new Error('DATAChampions sheet not found');
+function updateChampionRow(sheet, champion, faction, isWin) {
+  const dataRange = sheet.getDataRange();
+  const values = dataRange.getValues();
   
-  const rows = champions.map(champ => [
-    champ.gameId,
-    champ.timestamp,
-    champ.faction,
-    champ.championName,
-    champ.finalHealth,
-    champ.maxHealth,
-    champ.woodwisps,
-    champ.isDead
-  ]);
+  let championRow = -1;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === champion) {
+      championRow = i + 1;
+      break;
+    }
+  }
   
-  if (rows.length > 0) {
-    const startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+  if (championRow === -1) {
+    // Add new champion
+    const newRow = sheet.getLastRow() + 1;
+    sheet.appendRow([champion, faction, isWin ? 1 : 0, isWin ? 0 : 1, '=C' + newRow + '/(C' + newRow + '+D' + newRow + ')']);
+  } else {
+    // Update existing
+    const col = isWin ? 3 : 4; // wins in col 3, losses in col 4
+    const currentValue = sheet.getRange(championRow, col).getValue() || 0;
+    sheet.getRange(championRow, col).setValue(currentValue + 1);
   }
 }
 
-// =====================================
-// TOTALS UPDATE FUNCTIONS
-// =====================================
-
-function updateFactionTotals(ss) {
-  const matchSheet = ss.getSheetByName(CONFIG.MATCH_RESULTS_SHEET);
-  const totalsSheet = ss.getSheetByName(CONFIG.FACTION_TOTALS_SHEET);
-  if (!matchSheet || !totalsSheet) return;
+function updateCardTotals(ss, data) {
+  if (!data.deckCards || !data.matchResults) return;
   
-  const data = matchSheet.getDataRange().getValues();
-  if (data.length <= 1) return; // Only header row
+  const sheet = ss.getSheetByName(CONFIG.CARD_TOTALS_SHEET);
+  if (!sheet) return;
   
-  // Skip header, aggregate by faction
-  const factionStats = {};
-  for (let i = 1; i < data.length; i++) {
-    const faction = data[i][2];  // Column C = faction
-    const winLose = data[i][6];  // Column G = winLose
-    const score = data[i][7];    // Column H = finalScore
-    
-    if (!faction) continue;
-    
-    if (!factionStats[faction]) {
-      factionStats[faction] = { wins: 0, games: 0, totalScore: 0 };
-    }
-    
-    factionStats[faction].games++;
-    factionStats[faction].totalScore += (score || 0);
-    if (winLose === 'WIN') {
-      factionStats[faction].wins++;
+  const mr = data.matchResults;
+  
+  // Process winning deck cards
+  if (data.deckCards.winner) {
+    for (const card of data.deckCards.winner) {
+      updateCardRow(sheet, card.name, card.faction || mr.winningFaction, true);
     }
   }
   
-  // Build output rows
-  const outputRows = [['faction', 'winPercent', 'avgScore', 'gamesPlayed']];
-  for (const faction in factionStats) {
-    const stats = factionStats[faction];
-    const winPercent = stats.games > 0 ? Math.round((stats.wins / stats.games) * 100) + '%' : '0%';
-    const avgScore = stats.games > 0 ? (stats.totalScore / stats.games).toFixed(1) : '0';
-    outputRows.push([faction, winPercent, avgScore, stats.games]);
+  // Process losing deck cards
+  if (data.deckCards.loser) {
+    for (const card of data.deckCards.loser) {
+      updateCardRow(sheet, card.name, card.faction || mr.losingFaction, false);
+    }
   }
-  
-  // Clear and write
-  totalsSheet.clear();
-  totalsSheet.getRange(1, 1, outputRows.length, outputRows[0].length).setValues(outputRows);
 }
 
-function updateChampionTotals(ss) {
-  const champSheet = ss.getSheetByName(CONFIG.CHAMPIONS_SHEET);
-  const totalsSheet = ss.getSheetByName(CONFIG.CHAMPION_TOTALS_SHEET);
-  if (!champSheet || !totalsSheet) return;
+function updateCardRow(sheet, cardName, faction, isWinningDeck) {
+  const dataRange = sheet.getDataRange();
+  const values = dataRange.getValues();
   
-  const data = champSheet.getDataRange().getValues();
-  if (data.length <= 1) return;
-  
-  // Aggregate by faction + champion
-  const champStats = {};
-  for (let i = 1; i < data.length; i++) {
-    const faction = data[i][2];      // Column C
-    const champName = data[i][3];    // Column D
-    const health = data[i][4] || 0;  // Column E
-    const wisps = data[i][6] || 0;   // Column G
-    const isDead = data[i][7];       // Column H
-    
-    if (!faction || !champName) continue;
-    
-    const key = faction + '|' + champName;
-    if (!champStats[key]) {
-      champStats[key] = { faction, champName, totalHealth: 0, totalWisps: 0, deaths: 0, count: 0 };
-    }
-    
-    champStats[key].totalHealth += health;
-    champStats[key].totalWisps += wisps;
-    champStats[key].count++;
-    if (isDead === true || isDead === 'TRUE' || isDead === 'true') {
-      champStats[key].deaths++;
+  let cardRow = -1;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === cardName) {
+      cardRow = i + 1;
+      break;
     }
   }
   
-  // Build output
-  const outputRows = [['faction', 'championName', 'avgWisps', 'avgHealth', 'deathPercent']];
-  for (const key in champStats) {
-    const s = champStats[key];
-    const avgWisps = (s.totalWisps / s.count).toFixed(1);
-    const avgHealth = (s.totalHealth / s.count).toFixed(1);
-    const deathPercent = Math.round((s.deaths / s.count) * 100) + '%';
-    outputRows.push([s.faction, s.champName, avgWisps, avgHealth, deathPercent]);
+  if (cardRow === -1) {
+    // Add new card
+    const newRow = sheet.getLastRow() + 1;
+    sheet.appendRow([
+      cardName, 
+      faction, 
+      isWinningDeck ? 1 : 0,  // inWinningDeck
+      isWinningDeck ? 0 : 1,  // inLosingDeck
+      1,                       // totalAppearances
+      '=C' + newRow + '/(C' + newRow + '+D' + newRow + ')'  // winRate
+    ]);
+  } else {
+    // Update existing
+    const winCol = 3;
+    const loseCol = 4;
+    const totalCol = 5;
+    
+    if (isWinningDeck) {
+      const currentWins = sheet.getRange(cardRow, winCol).getValue() || 0;
+      sheet.getRange(cardRow, winCol).setValue(currentWins + 1);
+    } else {
+      const currentLosses = sheet.getRange(cardRow, loseCol).getValue() || 0;
+      sheet.getRange(cardRow, loseCol).setValue(currentLosses + 1);
+    }
+    
+    const currentTotal = sheet.getRange(cardRow, totalCol).getValue() || 0;
+    sheet.getRange(cardRow, totalCol).setValue(currentTotal + 1);
   }
-  
-  totalsSheet.clear();
-  totalsSheet.getRange(1, 1, outputRows.length, outputRows[0].length).setValues(outputRows);
 }
 
-function updateCardTotals(ss) {
-  const cardSheet = ss.getSheetByName(CONFIG.DECK_CARDS_SHEET);
-  const totalsSheet = ss.getSheetByName(CONFIG.CARD_TOTALS_SHEET);
-  if (!cardSheet || !totalsSheet) return;
-  
-  const data = cardSheet.getDataRange().getValues();
-  if (data.length <= 1) return;
-  
-  // Aggregate by faction + card
-  const cardStats = {};
-  for (let i = 1; i < data.length; i++) {
-    const faction = data[i][2];   // Column C
-    const cardName = data[i][3];  // Column D
-    
-    if (!faction || !cardName) continue;
-    
-    const key = faction + '|' + cardName;
-    if (!cardStats[key]) {
-      cardStats[key] = { faction, cardName, count: 0 };
-    }
-    cardStats[key].count++;
-  }
-  
-  // Build output sorted by faction, then by count descending
-  const outputRows = [['faction', 'cardName', 'timesTaken']];
-  const sortedKeys = Object.keys(cardStats).sort((a, b) => {
-    const statsA = cardStats[a];
-    const statsB = cardStats[b];
-    if (statsA.faction !== statsB.faction) {
-      return statsA.faction.localeCompare(statsB.faction);
-    }
-    return statsB.count - statsA.count; // Higher count first
-  });
-  
-  for (const key of sortedKeys) {
-    const s = cardStats[key];
-    outputRows.push([s.faction, s.cardName, s.count]);
-  }
-  
-  totalsSheet.clear();
-  totalsSheet.getRange(1, 1, outputRows.length, outputRows[0].length).setValues(outputRows);
-}
-
-// =====================================
-// TEST FUNCTIONS
-// =====================================
-
+// ============================================
+// TESTING FUNCTION
+// ============================================
 function testScript() {
-  const gameId = '00001';
-  const timestamp = '01-30-26 15:30';
-  
+  // Test with sample data
   const testData = {
-    gameId: gameId,
+    gameId: 'TEST-' + Date.now(),
     steamIds: ['76561198012345678', '76561198087654321'],
-    matchResults: [
-      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', playerName: 'TestPlayer1', steamId: '76561198012345678', roundEnded: 6, winLose: 'WIN', finalScore: 11 },
-      { gameId: gameId, timestamp: timestamp, faction: 'Boulderbreaker Clans', playerName: 'TestPlayer2', steamId: '76561198087654321', roundEnded: 6, winLose: 'LOSE', finalScore: 9 }
-    ],
-    deckCards: [
-      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', cardName: 'Savage Rend' },
-      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', cardName: 'Savage Rend' },
-      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', cardName: 'Prancing Stride' },
-      { gameId: gameId, timestamp: timestamp, faction: 'Boulderbreaker Clans', cardName: 'Boulder Smash' },
-      { gameId: gameId, timestamp: timestamp, faction: 'Boulderbreaker Clans', cardName: 'Boulder Smash' }
-    ],
-    champions: [
-      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', championName: 'Loresinger', finalHealth: 5, maxHealth: 10, woodwisps: 2, isDead: false },
-      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', championName: 'Wyldspeaker', finalHealth: 0, maxHealth: 8, woodwisps: 0, isDead: true },
-      { gameId: gameId, timestamp: timestamp, faction: 'Boulderbreaker Clans', championName: 'UrscarKing', finalHealth: 8, maxHealth: 21, woodwisps: 1, isDead: false }
-    ],
+    matchResults: {
+      winningFaction: 'Leafsong',
+      losingFaction: 'Boulderbreaker',
+      winningChampion: 'Forest Guardian',
+      losingChampion: 'Stone Titan',
+      winningPlayer: 'TestPlayer1',
+      losingPlayer: 'TestPlayer2'
+    },
+    deckCards: {
+      winner: [
+        { name: 'Nature\'s Wrath', faction: 'Leafsong' },
+        { name: 'Vine Whip', faction: 'Leafsong' }
+      ],
+      loser: [
+        { name: 'Rock Slam', faction: 'Boulderbreaker' },
+        { name: 'Mountain Shield', faction: 'Boulderbreaker' }
+      ]
+    },
+    champions: {
+      winner: { name: 'Forest Guardian', faction: 'Leafsong' },
+      loser: { name: 'Stone Titan', faction: 'Boulderbreaker' }
+    },
     feedback: {
-      cardFeedback: 'Savage Rend feels too strong',
-      generalFeedback: 'Great game!'
+      cardFeedback: 'Test card feedback - some cards feel overpowered',
+      gameFeedback: 'Test game feedback - really enjoyed the match!'
     }
   };
   
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  // Check cooldowns first (like real submission would)
-  const cooldownCheck = checkCooldowns(ss, testData.steamIds);
-  if (cooldownCheck.blocked) {
-    console.log('TEST BLOCKED: SteamID ' + cooldownCheck.blockedSteamId + ' is on cooldown. Minutes remaining: ' + cooldownCheck.minutesRemaining);
-    return;
+  // Test cooldown check
+  Logger.log('Testing cooldown check...');
+  const cooldownResult = checkCooldowns(ss, testData.steamIds);
+  Logger.log('Cooldown result: ' + JSON.stringify(cooldownResult));
+  
+  if (cooldownResult.allowed) {
+    // Write test data
+    Logger.log('Writing test match results...');
+    writeMatchResults(ss, testData);
+    
+    Logger.log('Writing test feedback...');
+    writeFeedback(ss, testData);
+    
+    Logger.log('Updating faction totals...');
+    updateFactionTotals(ss, testData);
+    
+    Logger.log('Updating champion totals...');
+    updateChampionTotals(ss, testData);
+    
+    Logger.log('Updating card totals...');
+    updateCardTotals(ss, testData);
+    
+    Logger.log('Test completed successfully!');
+  } else {
+    Logger.log('Cooldown active - skipping write test');
   }
-  
-  writeMatchResults(ss, testData.matchResults, testData.feedback);
-  writeDeckCards(ss, testData.deckCards);
-  writeChampions(ss, testData.champions);
-  updateFactionTotals(ss);
-  updateChampionTotals(ss);
-  updateCardTotals(ss);
-  
-  console.log('Test data written successfully!');
-}
-
-// Test the cooldown check without writing data
-function testCooldownCheck() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const testSteamIds = ['76561198012345678', '76561198087654321'];
-  
-  const result = checkCooldowns(ss, testSteamIds);
-  console.log('Cooldown check result: ' + JSON.stringify(result));
-}
-
-// Manually recalculate all totals (run this if totals seem off)
-function recalculateAllTotals() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  updateFactionTotals(ss);
-  updateChampionTotals(ss);
-  updateCardTotals(ss);
-  console.log('All totals recalculated!');
 }
 ```
 
-### Step 6: Save and Deploy
+### Step 4: Deploy as Web App
 
-1. Click the **floppy disk icon** to save
-2. Name the project **"Wyldwood Data Receiver"**
-3. Click **Deploy** → **New deployment**
-4. Click the **gear icon** → select **Web app**
-5. Set:
-   - **Description:** `Wyldwood`
-   - **Execute as:** `Me`
-   - **Who has access:** `Anyone`
-6. Click **Deploy**
-7. **Authorize** when prompted (click Advanced → Go to Wyldwood... if needed)
-8. **Copy the Web App URL**
+1. Click **Deploy > New deployment**
+2. Click the gear icon next to "Select type" and choose **Web app**
+3. Configure:
+   - **Description**: "Playtest Data Collector"
+   - **Execute as**: "Me"
+   - **Who has access**: "Anyone"
+4. Click **Deploy**
+5. **Authorize** the app when prompted
+6. **Copy the Web App URL** - you'll need this for TTS
 
-### Step 7: Update the TTS Script
+### Step 5: Configure TTS
 
-In Tabletop Simulator:
-1. Find the **GameTracker** object
-2. Open its Lua script
-3. Find the `WEBHOOK_URL` line near the top
-4. Replace it with your new Web App URL
-5. Save
+Update the `GOOGLE_SHEETS_URL` in your TTS script (GameTracker.lua) with the Web App URL you copied:
 
----
-
-## Spam Protection System
-
-### How It Works
-
-1. **SteamID Collection**: When a game ends, the TTS script collects the unique Steam IDs of both players
-2. **Cooldown Check**: Before accepting a submission, the Google script searches the MatchResults sheet for any previous submissions by these SteamIDs within the last 30 minutes
-3. **Rejection or Accept**: If a recent submission is found, the new submission is rejected with a message showing minutes remaining. Otherwise, the data is recorded.
-
-### Why This Works
-
-- **Steam IDs are unique and permanent** — Each Steam account has a unique 64-bit ID that cannot be changed
-- **Server-side validation** — The cooldown check happens on Google's servers, so it can't be bypassed by modifying the TTS script
-
-### Adjusting the Cooldown Duration
-
-To change the 30-minute cooldown, modify the line in the Google Apps Script that looks like this:
-
-```javascript
-COOLDOWN_MINUTES: 30
+```lua
+local GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
 ```
 
----
+## Testing
 
-## Testing Your Setup
+### Test from Google Sheets
 
-### Test the Google Script
-
-1. In Apps Script, select **testScript** from the function dropdown
-2. Click **Run** (▶)
-3. Check your sheets - you should see test data appear
-4. The Totals sheets should auto-populate
-5. Run **testScript** again immediately - it should be blocked by cooldown!
-
-### Test Cooldown Functions
-
-- **testCooldownCheck()** — Check if test SteamIDs are on cooldown based on MatchResults
+1. In Apps Script, select `testScript` from the function dropdown
+2. Click **Run**
+3. Check the **Execution log** for results
+4. Verify data appears in your sheets (MatchResults, Feedback, FactionTotals, etc.)
 
 ### Test from TTS
 
-1. Play a quick game in Tabletop Simulator
-2. Click **Submit Playtest Data** when the game ends
-3. Check Google Sheets for the new data
-4. Try submitting again immediately - you should see a cooldown message
-
----
+1. Play a complete game in TTS
+2. Submit the playtest data
+3. Check your Google Sheet for the new entry
+4. Try submitting again within 30 minutes - you should see the cooldown message
 
 ## Troubleshooting
 
+### "Cooldown active" when it shouldn't be
+- Check the MatchResults sheet for unexpected entries
+- Verify the timestamp column is formatted correctly
+- Check that SteamIDs are being recorded properly
+
 ### Data not appearing
-- Check that all 6 sheets exist with correct names
-- Check column headers match exactly
-- Run `testScript()` to verify the script works
+- Check the Apps Script execution logs for errors
+- Verify the Web App URL is correct in TTS
+- Make sure all sheet names match exactly (case-sensitive)
 
-### Totals not updating
-- Run `recalculateAllTotals()` manually from Apps Script
-- Check for errors in Apps Script logs (View → Executions)
+### Feedback not recording
+- Ensure the "Feedback" sheet exists with exact name
+- Check that feedback fields are not empty when submitting
+- Review Apps Script logs for any errors
 
-### Cooldown not working
-- Make sure the MatchResults sheet has the correct columns including steamId (column E)
-- Run `testCooldownCheck()` to debug
-- Check that timestamps are in the expected format
+### Authorization errors
+- Re-deploy the web app
+- Make sure "Anyone" has access
+- Try re-authorizing the script
 
-### "Unknown" SteamIDs
-- This happens when a player seat is empty or when testing in single-player
-- Submissions with "Unknown" SteamIDs are still allowed (they don't trigger cooldowns)
+## Data Flow Summary
 
----
+```
+TTS Game Complete
+       ↓
+Collect Data (including SteamIDs)
+       ↓
+POST to Google Apps Script
+       ↓
+Check Cooldowns (scan MatchResults for recent SteamID submissions)
+       ↓
+   [Cooldown Active?]
+       ↓ No              ↓ Yes
+Write to Sheets    Return Error to TTS
+       ↓
+Return Success to TTS
+```
+
+## Payload Format Reference
+
+The TTS script sends data in this format:
+
+```json
+{
+  "gameId": "unique-game-id",
+  "steamIds": ["winningSteamId", "losingSteamId"],
+  "matchResults": {
+    "winningFaction": "Faction Name",
+    "losingFaction": "Faction Name",
+    "winningChampion": "Champion Name",
+    "losingChampion": "Champion Name",
+    "winningPlayer": "Player Name",
+    "losingPlayer": "Player Name"
+  },
+  "deckCards": {
+    "winner": [{"name": "Card Name", "faction": "Faction"}],
+    "loser": [{"name": "Card Name", "faction": "Faction"}]
+  },
+  "champions": {
+    "winner": {"name": "Champion Name", "faction": "Faction"},
+    "loser": {"name": "Champion Name", "faction": "Faction"}
+  },
+  "feedback": {
+    "cardFeedback": "Player's card feedback text",
+    "gameFeedback": "Player's general game feedback text"
+  }
+}
+```
