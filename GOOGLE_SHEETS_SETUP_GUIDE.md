@@ -12,6 +12,7 @@ This playtest data collection system automatically captures detailed game statis
 - **Champion Totals** — Average health, woodwisps held, death rates per champion
 - **Card Totals** — How many times each card has been taken across all games
 - **Match Results** — Complete log of every match played
+- **Spam Protection** — 30-minute cooldown per SteamID prevents duplicate/spam submissions
 
 ---
 
@@ -28,7 +29,7 @@ These sheets show running totals that update automatically after each match subm
 | **CardTotals** | Times taken per card per faction |
 
 ### Raw Data Sheets (Individual Match Data)
-While they aren't usefull to read, they are used to store the raw data used to calculate totals. 
+While they aren't useful to read, they are used to store the raw data used to calculate totals. 
 
 | Sheet | Purpose |
 |-------|---------|
@@ -40,10 +41,10 @@ While they aren't usefull to read, they are used to store the raw data used to c
 ## Data Format
 
 ### Match Results (2 rows per game)
-| GameID | Timestamp | Faction | Player Name | Round Ended | Win/Lose | Final Score |
-|--------|-----------|---------|-------------|-------------|----------|-------------|
-| 00001 | 01-31-26 23:59 | Leafsong Nomads | Raikoh | 6 | LOSE | 9 |
-| 00001 | 01-31-26 23:59 | Boulderbreaker Clans | Brian | 6 | WIN | 11 |
+| GameID | Timestamp | Faction | Player Name | SteamID | Round Ended | Win/Lose | Final Score |
+|--------|-----------|---------|-------------|---------|-------------|----------|-------------|
+| 00001 | 01-31-26 23:59 | Leafsong Nomads | Raikoh | 76561198012345678 | 6 | LOSE | 9 |
+| 00001 | 01-31-26 23:59 | Boulderbreaker Clans | Brian | 76561198087654321 | 6 | WIN | 11 |
 
 ### Faction Totals
 | Faction | Win % | Average Score | Games Played |
@@ -73,7 +74,7 @@ While they aren't usefull to read, they are used to store the raw data used to c
 
 ### Step 2: Create the Required Sheets
 
-Create these 6 sheet tabs in this order (the order doesn’t affect the script, it’s just for clarity):
+Create these 6 sheet tabs in this order (the order doesn't affect the script, it's just for clarity):
 
 1. **MatchResults** — Rename "Sheet1" to this
 2. **FactionTotals** — Click + to add
@@ -85,9 +86,9 @@ Create these 6 sheet tabs in this order (the order doesn’t affect the script, 
 ### Step 3: Add Column Headers
 
 #### MatchResults Sheet
-| A | B | C | D | E | F | G |
-|---|---|---|---|---|---|---|
-| gameId | timestamp | faction | playerName | roundEnded | winLose | finalScore |
+| A | B | C | D | E | F | G | H |
+|---|---|---|---|---|---|---|---|
+| gameId | timestamp | faction | playerName | steamId | roundEnded | winLose | finalScore |
 
 #### DATADeckCards Sheet
 | A | B | C | D |
@@ -126,6 +127,8 @@ Create these 6 sheet tabs in this order (the order doesn’t affect the script, 
 /**
  * Wyldwood Playtest Data Receiver
  * Receives game data from Tabletop Simulator and writes to Google Sheets
+ * Includes spam protection via 30-minute cooldown per SteamID
+ * Cooldown is checked against existing MatchResults - no separate sheet needed
  */
 
 const CONFIG = {
@@ -134,7 +137,10 @@ const CONFIG = {
   CHAMPIONS_SHEET: 'DATAChampions',
   FACTION_TOTALS_SHEET: 'FactionTotals',
   CHAMPION_TOTALS_SHEET: 'ChampionTotals',
-  CARD_TOTALS_SHEET: 'CardTotals'
+  CARD_TOTALS_SHEET: 'CardTotals',
+  
+  // Cooldown duration in minutes
+  COOLDOWN_MINUTES: 30
 };
 
 function doPost(e) {
@@ -143,6 +149,20 @@ function doPost(e) {
     console.log('Received playtest data for game: ' + data.gameId);
     
     const ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // Check cooldowns by looking at MatchResults for recent submissions by these SteamIDs
+    const cooldownCheck = checkCooldowns(ss, data.steamIds || []);
+    if (cooldownCheck.blocked) {
+      console.log('Submission blocked due to cooldown. Minutes remaining: ' + cooldownCheck.minutesRemaining);
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          status: 'cooldown',
+          message: 'Please wait before submitting again',
+          minutesRemaining: cooldownCheck.minutesRemaining,
+          blockedSteamId: cooldownCheck.blockedSteamId
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     
     // Write raw data
     writeMatchResults(ss, data.matchResults, data.feedback);
@@ -183,6 +203,116 @@ function doGet(e) {
 }
 
 // =====================================
+// COOLDOWN / SPAM PROTECTION FUNCTIONS
+// =====================================
+
+/**
+ * Check if any of the provided SteamIDs have submitted within the cooldown period
+ * by looking at the MatchResults sheet timestamps
+ * 
+ * @param {Spreadsheet} ss - The active spreadsheet
+ * @param {string[]} steamIds - Array of SteamIDs to check
+ * @returns {Object} - {blocked: boolean, minutesRemaining: number, blockedSteamId: string}
+ */
+function checkCooldowns(ss, steamIds) {
+  if (!steamIds || steamIds.length === 0) {
+    // No SteamIDs provided, allow submission (might be single player or test)
+    return { blocked: false };
+  }
+  
+  // Filter out "Unknown" SteamIDs
+  const validSteamIds = steamIds.filter(id => id && id !== 'Unknown');
+  if (validSteamIds.length === 0) {
+    return { blocked: false };
+  }
+  
+  const sheet = ss.getSheetByName(CONFIG.MATCH_RESULTS_SHEET);
+  if (!sheet) {
+    console.log('MatchResults sheet not found, skipping cooldown check');
+    return { blocked: false };
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    // Only header row, no previous submissions
+    return { blocked: false };
+  }
+  
+  const now = new Date();
+  const cooldownMs = CONFIG.COOLDOWN_MINUTES * 60 * 1000;
+  
+  // Find the most recent submission timestamp for each SteamID we're checking
+  // MatchResults format: gameId | timestamp | faction | playerName | steamId | roundEnded | winLose | finalScore
+  // Columns:               0    |     1     |    2    |     3      |    4    |     5      |    6    |     7
+  
+  for (let i = 1; i < data.length; i++) {
+    const rowSteamId = String(data[i][4]); // Column E = steamId
+    const rowTimestamp = data[i][1];       // Column B = timestamp
+    
+    // Check if this row's SteamID matches any we're checking
+    if (validSteamIds.includes(rowSteamId)) {
+      // Parse the timestamp (format: "MM-DD-YY HH:MM")
+      const submissionTime = parseTimestamp(rowTimestamp);
+      
+      if (submissionTime) {
+        const timeSinceSubmission = now - submissionTime;
+        
+        if (timeSinceSubmission < cooldownMs) {
+          // This SteamID submitted within the cooldown period
+          const minutesRemaining = Math.ceil((cooldownMs - timeSinceSubmission) / (1000 * 60));
+          return {
+            blocked: true,
+            minutesRemaining: minutesRemaining,
+            blockedSteamId: rowSteamId
+          };
+        }
+      }
+    }
+  }
+  
+  return { blocked: false };
+}
+
+/**
+ * Parse a timestamp string in format "MM-DD-YY HH:MM" into a Date object
+ * @param {string|Date} timestamp - The timestamp to parse
+ * @returns {Date|null} - Parsed Date or null if invalid
+ */
+function parseTimestamp(timestamp) {
+  if (!timestamp) return null;
+  
+  // If it's already a Date object (Google Sheets might auto-convert), use it directly
+  if (timestamp instanceof Date) {
+    return timestamp;
+  }
+  
+  // Parse string format "MM-DD-YY HH:MM"
+  const str = String(timestamp);
+  const match = str.match(/^(\d{2})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})$/);
+  
+  if (match) {
+    const month = parseInt(match[1], 10) - 1; // JS months are 0-indexed
+    const day = parseInt(match[2], 10);
+    let year = parseInt(match[3], 10);
+    const hour = parseInt(match[4], 10);
+    const minute = parseInt(match[5], 10);
+    
+    // Convert 2-digit year to 4-digit (assumes 2000s)
+    year = year + 2000;
+    
+    return new Date(year, month, day, hour, minute);
+  }
+  
+  // Try parsing as a generic date string
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return parsed;
+  }
+  
+  return null;
+}
+
+// =====================================
 // RAW DATA WRITING FUNCTIONS
 // =====================================
 
@@ -195,6 +325,7 @@ function writeMatchResults(ss, matchResults, feedback) {
     mr.timestamp,
     mr.faction,
     mr.playerName,
+    mr.steamId || 'Unknown',
     mr.roundEnded,
     mr.winLose,
     mr.finalScore
@@ -205,8 +336,7 @@ function writeMatchResults(ss, matchResults, feedback) {
     sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
   }
   
-  // Store feedback in the first row of each match (column H onwards if desired)
-  // For now, feedback is logged but not stored separately
+  // Log feedback (could be stored in a separate column or sheet if desired)
   if (feedback && (feedback.cardFeedback || feedback.generalFeedback)) {
     console.log('Card Feedback: ' + (feedback.cardFeedback || 'None'));
     console.log('General Feedback: ' + (feedback.generalFeedback || 'None'));
@@ -266,9 +396,9 @@ function updateFactionTotals(ss) {
   // Skip header, aggregate by faction
   const factionStats = {};
   for (let i = 1; i < data.length; i++) {
-    const faction = data[i][2]; // Column C = faction
-    const winLose = data[i][5]; // Column F = winLose
-    const score = data[i][6];   // Column G = finalScore
+    const faction = data[i][2];  // Column C = faction
+    const winLose = data[i][6];  // Column G = winLose
+    const score = data[i][7];    // Column H = finalScore
     
     if (!faction) continue;
     
@@ -387,7 +517,7 @@ function updateCardTotals(ss) {
 }
 
 // =====================================
-// TEST FUNCTION
+// TEST FUNCTIONS
 // =====================================
 
 function testScript() {
@@ -396,9 +526,10 @@ function testScript() {
   
   const testData = {
     gameId: gameId,
+    steamIds: ['76561198012345678', '76561198087654321'],
     matchResults: [
-      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', playerName: 'TestPlayer1', roundEnded: 6, winLose: 'WIN', finalScore: 11 },
-      { gameId: gameId, timestamp: timestamp, faction: 'Boulderbreaker Clans', playerName: 'TestPlayer2', roundEnded: 6, winLose: 'LOSE', finalScore: 9 }
+      { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', playerName: 'TestPlayer1', steamId: '76561198012345678', roundEnded: 6, winLose: 'WIN', finalScore: 11 },
+      { gameId: gameId, timestamp: timestamp, faction: 'Boulderbreaker Clans', playerName: 'TestPlayer2', steamId: '76561198087654321', roundEnded: 6, winLose: 'LOSE', finalScore: 9 }
     ],
     deckCards: [
       { gameId: gameId, timestamp: timestamp, faction: 'Leafsong Nomads', cardName: 'Savage Rend' },
@@ -419,6 +550,14 @@ function testScript() {
   };
   
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Check cooldowns first (like real submission would)
+  const cooldownCheck = checkCooldowns(ss, testData.steamIds);
+  if (cooldownCheck.blocked) {
+    console.log('TEST BLOCKED: SteamID ' + cooldownCheck.blockedSteamId + ' is on cooldown. Minutes remaining: ' + cooldownCheck.minutesRemaining);
+    return;
+  }
+  
   writeMatchResults(ss, testData.matchResults, testData.feedback);
   writeDeckCards(ss, testData.deckCards);
   writeChampions(ss, testData.champions);
@@ -427,6 +566,15 @@ function testScript() {
   updateCardTotals(ss);
   
   console.log('Test data written successfully!');
+}
+
+// Test the cooldown check without writing data
+function testCooldownCheck() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const testSteamIds = ['76561198012345678', '76561198087654321'];
+  
+  const result = checkCooldowns(ss, testSteamIds);
+  console.log('Cooldown check result: ' + JSON.stringify(result));
 }
 
 // Manually recalculate all totals (run this if totals seem off)
@@ -446,7 +594,7 @@ function recalculateAllTotals() {
 3. Click **Deploy** → **New deployment**
 4. Click the **gear icon** → select **Web app**
 5. Set:
-  - **Description:** `Wyldwood`
+   - **Description:** `Wyldwood`
    - **Execute as:** `Me`
    - **Who has access:** `Anyone`
 6. Click **Deploy**
@@ -464,6 +612,29 @@ In Tabletop Simulator:
 
 ---
 
+## Spam Protection System
+
+### How It Works
+
+1. **SteamID Collection**: When a game ends, the TTS script collects the unique Steam IDs of both players
+2. **Cooldown Check**: Before accepting a submission, the Google script searches the MatchResults sheet for any previous submissions by these SteamIDs within the last 30 minutes
+3. **Rejection or Accept**: If a recent submission is found, the new submission is rejected with a message showing minutes remaining. Otherwise, the data is recorded.
+
+### Why This Works
+
+- **Steam IDs are unique and permanent** — Each Steam account has a unique 64-bit ID that cannot be changed
+- **Server-side validation** — The cooldown check happens on Google's servers, so it can't be bypassed by modifying the TTS script
+
+### Adjusting the Cooldown Duration
+
+To change the 30-minute cooldown, modify the line in the Google Apps Script that looks like this:
+
+```javascript
+COOLDOWN_MINUTES: 30
+```
+
+---
+
 ## Testing Your Setup
 
 ### Test the Google Script
@@ -472,12 +643,18 @@ In Tabletop Simulator:
 2. Click **Run** (▶)
 3. Check your sheets - you should see test data appear
 4. The Totals sheets should auto-populate
+5. Run **testScript** again immediately - it should be blocked by cooldown!
+
+### Test Cooldown Functions
+
+- **testCooldownCheck()** — Check if test SteamIDs are on cooldown based on MatchResults
 
 ### Test from TTS
 
 1. Play a quick game in Tabletop Simulator
 2. Click **Submit Playtest Data** when the game ends
 3. Check Google Sheets for the new data
+4. Try submitting again immediately - you should see a cooldown message
 
 ---
 
@@ -491,5 +668,14 @@ In Tabletop Simulator:
 ### Totals not updating
 - Run `recalculateAllTotals()` manually from Apps Script
 - Check for errors in Apps Script logs (View → Executions)
+
+### Cooldown not working
+- Make sure the MatchResults sheet has the correct columns including steamId (column E)
+- Run `testCooldownCheck()` to debug
+- Check that timestamps are in the expected format
+
+### "Unknown" SteamIDs
+- This happens when a player seat is empty or when testing in single-player
+- Submissions with "Unknown" SteamIDs are still allowed (they don't trigger cooldowns)
 
 ---
