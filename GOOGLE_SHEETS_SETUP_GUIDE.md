@@ -77,7 +77,8 @@ const CONFIG = {
   CHAMPION_TOTALS_SHEET: 'ChampionTotals',
   CARD_TOTALS_SHEET: 'CardTotals',
   FEEDBACK_SHEET: 'Feedback',
-  COOLDOWN_MINUTES: 30
+  COOLDOWN_MINUTES: 30,
+  ENABLE_STEAMID_CHECK: true // Set to false to disable cooldown checks
 };
 
 // ============================================
@@ -85,6 +86,15 @@ const CONFIG = {
 // ============================================
 function doPost(e) {
   try {
+    // Check if postData exists
+    if (!e || !e.postData || !e.postData.contents) {
+       return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        error: 'no_data',
+        message: 'No POST data received'
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
     const data = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
@@ -114,6 +124,10 @@ function doPost(e) {
     })).setMimeType(ContentService.MimeType.JSON);
     
   } catch (error) {
+    // Log error for debugging
+    Logger.log('Error in doPost: ' + error.toString());
+    if (error.stack) Logger.log(error.stack);
+    
     return ContentService.createTextOutput(JSON.stringify({
       success: false,
       error: 'server_error',
@@ -126,6 +140,12 @@ function doPost(e) {
 // COOLDOWN FUNCTIONS
 // ============================================
 function checkCooldowns(ss, steamIds) {
+  // Return early if check is disabled
+  if (!CONFIG.ENABLE_STEAMID_CHECK) {
+    Logger.log('SteamID check disabled in CONFIG');
+    return { allowed: true };
+  }
+
   if (!steamIds || steamIds.length === 0) {
     // No SteamIDs provided - allow submission but log warning
     Logger.log('Warning: No SteamIDs provided for cooldown check');
@@ -437,65 +457,79 @@ function updateCardRow(sheet, cardName, faction, isWinningDeck) {
 // TESTING FUNCTION
 // ============================================
 function testScript() {
-  // Test with sample data
-  const testData = {
-    gameId: 'TEST-' + Date.now(),
-    steamIds: ['76561198012345678', '76561198087654321'],
-    matchResults: {
-      winningFaction: 'Leafsong',
-      losingFaction: 'Boulderbreaker',
-      winningChampion: 'Forest Guardian',
-      losingChampion: 'Stone Titan',
-      winningPlayer: 'TestPlayer1',
-      losingPlayer: 'TestPlayer2'
-    },
-    deckCards: {
-      winner: [
-        { name: 'Nature\'s Wrath', faction: 'Leafsong' },
-        { name: 'Vine Whip', faction: 'Leafsong' }
-      ],
-      loser: [
-        { name: 'Rock Slam', faction: 'Boulderbreaker' },
-        { name: 'Mountain Shield', faction: 'Boulderbreaker' }
-      ]
-    },
-    champions: {
-      winner: { name: 'Forest Guardian', faction: 'Leafsong' },
-      loser: { name: 'Stone Titan', faction: 'Boulderbreaker' }
-    },
-    feedback: {
-      cardFeedback: 'Test card feedback - some cards feel overpowered',
-      gameFeedback: 'Test game feedback - really enjoyed the match!'
+  try {
+    Logger.log('Starting testScript execution...');
+    
+    // Test with sample data
+    const testData = {
+      gameId: 'TEST-' + Date.now(),
+      steamIds: ['76561198012345678', '76561198087654321'],
+      matchResults: {
+        winningFaction: 'Leafsong',
+        losingFaction: 'Boulderbreaker',
+        winningChampion: 'Forest Guardian',
+        losingChampion: 'Stone Titan',
+        winningPlayer: 'TestPlayer1',
+        losingPlayer: 'TestPlayer2'
+      },
+      deckCards: {
+        winner: [
+          { name: 'Nature\'s Wrath', faction: 'Leafsong' },
+          { name: 'Vine Whip', faction: 'Leafsong' }
+        ],
+        loser: [
+          { name: 'Rock Slam', faction: 'Boulderbreaker' },
+          { name: 'Mountain Shield', faction: 'Boulderbreaker' }
+        ]
+      },
+      champions: {
+        winner: { name: 'Forest Guardian', faction: 'Leafsong' },
+        loser: { name: 'Stone Titan', faction: 'Boulderbreaker' }
+      },
+      feedback: {
+        cardFeedback: 'Test card feedback - some cards feel overpowered',
+        gameFeedback: 'Test game feedback - really enjoyed the match!'
+      }
+    };
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) {
+      throw new Error('SpreadsheetApp.getActiveSpreadsheet() returned null. Make sure the script is container-bound to a Google Sheet.');
     }
-  };
-  
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  // Test cooldown check
-  Logger.log('Testing cooldown check...');
-  const cooldownResult = checkCooldowns(ss, testData.steamIds);
-  Logger.log('Cooldown result: ' + JSON.stringify(cooldownResult));
-  
-  if (cooldownResult.allowed) {
-    // Write test data
-    Logger.log('Writing test match results...');
-    writeMatchResults(ss, testData);
     
-    Logger.log('Writing test feedback...');
-    writeFeedback(ss, testData);
+    // Test cooldown check
+    Logger.log('Testing cooldown check...');
+    const cooldownResult = checkCooldowns(ss, testData.steamIds);
+    Logger.log('Cooldown result: ' + JSON.stringify(cooldownResult));
     
-    Logger.log('Updating faction totals...');
-    updateFactionTotals(ss, testData);
+    if (cooldownResult.allowed) {
+      // Write test data
+      Logger.log('Writing test match results...');
+      writeMatchResults(ss, testData);
+      
+      Logger.log('Writing test feedback...');
+      writeFeedback(ss, testData);
+      
+      Logger.log('Updating faction totals...');
+      updateFactionTotals(ss, testData);
+      
+      Logger.log('Updating champion totals...');
+      updateChampionTotals(ss, testData);
+      
+      Logger.log('Updating card totals...');
+      updateCardTotals(ss, testData);
+      
+      Logger.log('Test completed successfully!');
+    } else {
+      Logger.log('Cooldown active - skipping write test');
+    }
     
-    Logger.log('Updating champion totals...');
-    updateChampionTotals(ss, testData);
-    
-    Logger.log('Updating card totals...');
-    updateCardTotals(ss, testData);
-    
-    Logger.log('Test completed successfully!');
-  } else {
-    Logger.log('Cooldown active - skipping write test');
+  } catch (error) {
+    Logger.log('FATAL ERROR in testScript: ' + error.toString());
+    if (error.stack) {
+      Logger.log('Stack trace: ' + error.stack);
+    }
+    throw error;
   }
 }
 ```
@@ -606,3 +640,4 @@ The TTS script sends data in this format:
   }
 }
 ```
+
