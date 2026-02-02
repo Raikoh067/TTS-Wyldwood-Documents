@@ -346,7 +346,8 @@ function updateFactionTotals(ss, data) {
 }
 
 function updateChampionTotals(ss, data) {
-  // Now uses champions array with death tracking
+  // Champions are tracked globally (not per-player).
+  // Each champion entry should include current HP so death can be inferred.
   if (!data.champions || !Array.isArray(data.champions)) return;
   
   const sheet = ss.getSheetByName(CONFIG.CHAMPION_TOTALS_SHEET);
@@ -355,9 +356,22 @@ function updateChampionTotals(ss, data) {
   // Process each champion's death status
   for (const champ of data.champions) {
     if (champ.name) {
-      updateChampionRow(sheet, champ.name, champ.faction || '', champ.died || false);
+      const died = getChampionDiedFlag(champ);
+      updateChampionRow(sheet, champ.name, champ.faction || '', died);
     }
   }
+}
+
+function getChampionDiedFlag(champ) {
+  // Prefer HP-based death detection if provided
+  if (typeof champ.health === 'number') {
+    return champ.health <= 0;
+  }
+  // Fallback to explicit died flag if present
+  if (typeof champ.died === 'boolean') {
+    return champ.died;
+  }
+  return false;
 }
 
 function updateChampionRow(sheet, champion, faction, died) {
@@ -467,10 +481,10 @@ function testScript() {
         ]
       },
       champions: [
-        { name: 'HighSpiritseer', faction: 'Leafsong Nomads', died: false },
-        { name: 'Loresinger', faction: 'Leafsong Nomads', died: true },
-        { name: 'UrscarKing', faction: 'Boulderbreaker Clans', died: true },
-        { name: 'MakaraElder', faction: 'Boulderbreaker Clans', died: false }
+        { name: 'HighSpiritseer', faction: 'Leafsong Nomads', health: 5, maxHealth: 8 },
+        { name: 'Loresinger', faction: 'Leafsong Nomads', health: 0, maxHealth: 7 },
+        { name: 'UrscarKing', faction: 'Boulderbreaker Clans', health: 0, maxHealth: 10 },
+        { name: 'MakaraElder', faction: 'Boulderbreaker Clans', health: 3, maxHealth: 6 }
       ],
       feedback: {
         cardFeedback: 'Test card feedback - some cards feel overpowered',
@@ -615,8 +629,8 @@ The TTS script sends data in this format:
     "loser": [{"name": "Card Name", "faction": "Faction"}]
   },
   "champions": [
-    {"name": "Champion Name", "faction": "Faction", "died": true},
-    {"name": "Champion Name", "faction": "Faction", "died": false}
+    {"name": "Champion Name", "faction": "Faction", "health": 0, "maxHealth": 10},
+    {"name": "Champion Name", "faction": "Faction", "health": 6, "maxHealth": 10}
   ],
   "feedback": {
     "cardFeedback": "Player's card feedback text",
@@ -627,5 +641,3 @@ The TTS script sends data in this format:
 
 **Note:** Only the host can submit playtest data. The submit button and feedback UI are only visible to the host.
 ```
-
-
