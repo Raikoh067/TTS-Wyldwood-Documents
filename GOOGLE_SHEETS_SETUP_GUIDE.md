@@ -34,25 +34,25 @@ Create 5 sheets with these exact names and column headers:
 #### Sheet 1: MatchResults
 Column headers (Row 1):
 ```
-timestamp | gameId | winningFaction | losingFaction | winningChampion | losingChampion | winningPlayer | losingPlayer | winningSteamId | losingSteamId
+timestamp | gameId | winningFaction | losingFaction | winningPlayer | losingPlayer | winningSteamId | losingSteamId
 ```
 
 #### Sheet 2: FactionTotals
 Column headers (Row 1):
 ```
-faction | wins | losses | winRate
+faction | wins | losses | winRate (displays as percentage)
 ```
 
 #### Sheet 3: ChampionTotals
 Column headers (Row 1):
 ```
-champion | faction | wins | losses | winRate
+champion | faction | deaths | appearances | deathRate (displays as percentage)
 ```
 
 #### Sheet 4: CardTotals
 Column headers (Row 1):
 ```
-cardName | faction | inWinningDeck | inLosingDeck | totalAppearances | winRate
+cardName | faction | timesTaken
 ```
 
 #### Sheet 5: Feedback
@@ -258,8 +258,6 @@ function writeMatchResults(ss, data) {
     data.gameId || '',             // gameId
     mr.winningFaction || '',       // winningFaction
     mr.losingFaction || '',        // losingFaction
-    mr.winningChampion || '',      // winningChampion
-    mr.losingChampion || '',       // losingChampion
     mr.winningPlayer || '',        // winningPlayer
     mr.losingPlayer || '',         // losingPlayer
     winningSteamId,                // winningSteamId
@@ -330,7 +328,8 @@ function updateFactionTotals(ss, data) {
   
   // Update winner
   if (winnerRow === -1) {
-    sheet.appendRow([winningFaction, 1, 0, '=B' + (sheet.getLastRow() + 1) + '/(B' + (sheet.getLastRow() + 1) + '+C' + (sheet.getLastRow() + 1) + ')']);
+    const newRow = sheet.getLastRow() + 1;
+    sheet.appendRow([winningFaction, 1, 0, '=TEXT(B' + newRow + '/(B' + newRow + '+C' + newRow + '),"0%")']);
   } else {
     const currentWins = sheet.getRange(winnerRow, 2).getValue() || 0;
     sheet.getRange(winnerRow, 2).setValue(currentWins + 1);
@@ -338,7 +337,8 @@ function updateFactionTotals(ss, data) {
   
   // Update loser
   if (loserRow === -1) {
-    sheet.appendRow([losingFaction, 0, 1, '=B' + (sheet.getLastRow() + 1) + '/(B' + (sheet.getLastRow() + 1) + '+C' + (sheet.getLastRow() + 1) + ')']);
+    const newRow = sheet.getLastRow() + 1;
+    sheet.appendRow([losingFaction, 0, 1, '=TEXT(B' + newRow + '/(B' + newRow + '+C' + newRow + '),"0%")']);
   } else {
     const currentLosses = sheet.getRange(loserRow, 3).getValue() || 0;
     sheet.getRange(loserRow, 3).setValue(currentLosses + 1);
@@ -346,25 +346,21 @@ function updateFactionTotals(ss, data) {
 }
 
 function updateChampionTotals(ss, data) {
-  if (!data.matchResults) return;
+  // Now uses champions array with death tracking
+  if (!data.champions || !Array.isArray(data.champions)) return;
   
   const sheet = ss.getSheetByName(CONFIG.CHAMPION_TOTALS_SHEET);
   if (!sheet) return;
   
-  const mr = data.matchResults;
-  
-  // Update winning champion
-  if (mr.winningChampion && mr.winningFaction) {
-    updateChampionRow(sheet, mr.winningChampion, mr.winningFaction, true);
-  }
-  
-  // Update losing champion
-  if (mr.losingChampion && mr.losingFaction) {
-    updateChampionRow(sheet, mr.losingChampion, mr.losingFaction, false);
+  // Process each champion's death status
+  for (const champ of data.champions) {
+    if (champ.name) {
+      updateChampionRow(sheet, champ.name, champ.faction || '', champ.died || false);
+    }
   }
 }
 
-function updateChampionRow(sheet, champion, faction, isWin) {
+function updateChampionRow(sheet, champion, faction, died) {
   const dataRange = sheet.getDataRange();
   const values = dataRange.getValues();
   
@@ -377,41 +373,51 @@ function updateChampionRow(sheet, champion, faction, isWin) {
   }
   
   if (championRow === -1) {
-    // Add new champion
+    // Add new champion: champion | faction | deaths | appearances | deathRate
     const newRow = sheet.getLastRow() + 1;
-    sheet.appendRow([champion, faction, isWin ? 1 : 0, isWin ? 0 : 1, '=C' + newRow + '/(C' + newRow + '+D' + newRow + ')']);
+    sheet.appendRow([
+      champion, 
+      faction, 
+      died ? 1 : 0,  // deaths
+      1,              // appearances
+      '=TEXT(C' + newRow + '/D' + newRow + ',"0%")'  // deathRate as percentage
+    ]);
   } else {
     // Update existing
-    const col = isWin ? 3 : 4; // wins in col 3, losses in col 4
-    const currentValue = sheet.getRange(championRow, col).getValue() || 0;
-    sheet.getRange(championRow, col).setValue(currentValue + 1);
+    if (died) {
+      const currentDeaths = sheet.getRange(championRow, 3).getValue() || 0;
+      sheet.getRange(championRow, 3).setValue(currentDeaths + 1);
+    }
+    const currentAppearances = sheet.getRange(championRow, 4).getValue() || 0;
+    sheet.getRange(championRow, 4).setValue(currentAppearances + 1);
   }
 }
 
 function updateCardTotals(ss, data) {
-  if (!data.deckCards || !data.matchResults) return;
+  if (!data.deckCards) return;
   
   const sheet = ss.getSheetByName(CONFIG.CARD_TOTALS_SHEET);
   if (!sheet) return;
   
-  const mr = data.matchResults;
-  
-  // Process winning deck cards
+  // Process all deck cards (winner and loser combined)
+  const allCards = [];
   if (data.deckCards.winner) {
     for (const card of data.deckCards.winner) {
-      updateCardRow(sheet, card.name, card.faction || mr.winningFaction, true);
+      allCards.push(card);
+    }
+  }
+  if (data.deckCards.loser) {
+    for (const card of data.deckCards.loser) {
+      allCards.push(card);
     }
   }
   
-  // Process losing deck cards
-  if (data.deckCards.loser) {
-    for (const card of data.deckCards.loser) {
-      updateCardRow(sheet, card.name, card.faction || mr.losingFaction, false);
-    }
+  for (const card of allCards) {
+    updateCardRow(sheet, card.name, card.faction || '');
   }
 }
 
-function updateCardRow(sheet, cardName, faction, isWinningDeck) {
+function updateCardRow(sheet, cardName, faction) {
   const dataRange = sheet.getDataRange();
   const values = dataRange.getValues();
   
@@ -424,32 +430,12 @@ function updateCardRow(sheet, cardName, faction, isWinningDeck) {
   }
   
   if (cardRow === -1) {
-    // Add new card
-    const newRow = sheet.getLastRow() + 1;
-    sheet.appendRow([
-      cardName, 
-      faction, 
-      isWinningDeck ? 1 : 0,  // inWinningDeck
-      isWinningDeck ? 0 : 1,  // inLosingDeck
-      1,                       // totalAppearances
-      '=C' + newRow + '/(C' + newRow + '+D' + newRow + ')'  // winRate
-    ]);
+    // Add new card: cardName | faction | timesTaken
+    sheet.appendRow([cardName, faction, 1]);
   } else {
-    // Update existing
-    const winCol = 3;
-    const loseCol = 4;
-    const totalCol = 5;
-    
-    if (isWinningDeck) {
-      const currentWins = sheet.getRange(cardRow, winCol).getValue() || 0;
-      sheet.getRange(cardRow, winCol).setValue(currentWins + 1);
-    } else {
-      const currentLosses = sheet.getRange(cardRow, loseCol).getValue() || 0;
-      sheet.getRange(cardRow, loseCol).setValue(currentLosses + 1);
-    }
-    
-    const currentTotal = sheet.getRange(cardRow, totalCol).getValue() || 0;
-    sheet.getRange(cardRow, totalCol).setValue(currentTotal + 1);
+    // Update existing - increment timesTaken (column 3)
+    const currentCount = sheet.getRange(cardRow, 3).getValue() || 0;
+    sheet.getRange(cardRow, 3).setValue(currentCount + 1);
   }
 }
 
@@ -465,27 +451,27 @@ function testScript() {
       gameId: 'TEST-' + Date.now(),
       steamIds: ['76561198012345678', '76561198087654321'],
       matchResults: {
-        winningFaction: 'Leafsong',
-        losingFaction: 'Boulderbreaker',
-        winningChampion: 'Forest Guardian',
-        losingChampion: 'Stone Titan',
+        winningFaction: 'Leafsong Nomads',
+        losingFaction: 'Boulderbreaker Clans',
         winningPlayer: 'TestPlayer1',
         losingPlayer: 'TestPlayer2'
       },
       deckCards: {
         winner: [
-          { name: 'Nature\'s Wrath', faction: 'Leafsong' },
-          { name: 'Vine Whip', faction: 'Leafsong' }
+          { name: 'Nature\'s Wrath', faction: 'Leafsong Nomads' },
+          { name: 'Vine Whip', faction: 'Leafsong Nomads' }
         ],
         loser: [
-          { name: 'Rock Slam', faction: 'Boulderbreaker' },
-          { name: 'Mountain Shield', faction: 'Boulderbreaker' }
+          { name: 'Rock Slam', faction: 'Boulderbreaker Clans' },
+          { name: 'Mountain Shield', faction: 'Boulderbreaker Clans' }
         ]
       },
-      champions: {
-        winner: { name: 'Forest Guardian', faction: 'Leafsong' },
-        loser: { name: 'Stone Titan', faction: 'Boulderbreaker' }
-      },
+      champions: [
+        { name: 'HighSpiritseer', faction: 'Leafsong Nomads', died: false },
+        { name: 'Loresinger', faction: 'Leafsong Nomads', died: true },
+        { name: 'UrscarKing', faction: 'Boulderbreaker Clans', died: true },
+        { name: 'MakaraElder', faction: 'Boulderbreaker Clans', died: false }
+      ],
       feedback: {
         cardFeedback: 'Test card feedback - some cards feel overpowered',
         gameFeedback: 'Test game feedback - really enjoyed the match!'
@@ -621,8 +607,6 @@ The TTS script sends data in this format:
   "matchResults": {
     "winningFaction": "Faction Name",
     "losingFaction": "Faction Name",
-    "winningChampion": "Champion Name",
-    "losingChampion": "Champion Name",
     "winningPlayer": "Player Name",
     "losingPlayer": "Player Name"
   },
@@ -630,14 +614,18 @@ The TTS script sends data in this format:
     "winner": [{"name": "Card Name", "faction": "Faction"}],
     "loser": [{"name": "Card Name", "faction": "Faction"}]
   },
-  "champions": {
-    "winner": {"name": "Champion Name", "faction": "Faction"},
-    "loser": {"name": "Champion Name", "faction": "Faction"}
-  },
+  "champions": [
+    {"name": "Champion Name", "faction": "Faction", "died": true},
+    {"name": "Champion Name", "faction": "Faction", "died": false}
+  ],
   "feedback": {
     "cardFeedback": "Player's card feedback text",
     "gameFeedback": "Player's general game feedback text"
   }
 }
 ```
+
+**Note:** Only the host can submit playtest data. The submit button and feedback UI are only visible to the host.
+```
+
 
