@@ -78,7 +78,7 @@ const CONFIG = {
   CARD_TOTALS_SHEET: 'CardTotals',
   FEEDBACK_SHEET: 'Feedback',
   COOLDOWN_MINUTES: 30,
-  ENABLE_STEAMID_CHECK: true // Set to false to disable cooldown checks
+  ENABLE_STEAMID_CHECK: false // Set to false to disable cooldown checks
 };
 
 // ============================================
@@ -694,3 +694,4 @@ The TTS script sends data in this format (gameId is generated server-side):
 
 **Note:** Only the host can submit playtest data. The submit button and feedback UI are only visible to the host.
 ```
+
